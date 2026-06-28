@@ -2,6 +2,7 @@ global using AutoMapper;
 global using Microsoft.EntityFrameworkCore;
 
 using System.Text.Json.Serialization;
+using dotnetrpg_again.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -30,6 +31,10 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddAutoMapper(cfg => {}, typeof(Program).Assembly);
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddDbContext<DataContext>(options =>
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+});
 
 
 
@@ -80,7 +85,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.MapScalarApiReference(options => 
 	{
-		options.WithTitle("RPG API")
+		options.WithTitle("rptr api")
 		.ExpandAllTags()
 		.WithTheme(ScalarTheme.BluePlanet)
         .AddPreferredSecuritySchemes("Bearer")
