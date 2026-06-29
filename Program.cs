@@ -1,8 +1,9 @@
 global using AutoMapper;
 global using Microsoft.EntityFrameworkCore;
+global using  dotnetrpg_again.Data;
+global using rptr.Models;
 
 using System.Text.Json.Serialization;
-using dotnetrpg_again.Data;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -31,6 +32,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddAutoMapper(cfg => {}, typeof(Program).Assembly);
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddDataProtection();
 builder.Services.AddDbContext<DataContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
