@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using rptr.Services.Authorization;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,6 +34,11 @@ builder.Services.AddOpenApi();
 builder.Services.AddAutoMapper(cfg => {}, typeof(Program).Assembly);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDataProtection();
+builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("SpotifySettings"));
+builder.Services.Configure<AuthRedirectSettings>(builder.Configuration.GetSection("AuthRedirects"));
 builder.Services.AddDbContext<DataContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));

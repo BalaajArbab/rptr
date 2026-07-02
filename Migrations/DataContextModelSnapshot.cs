@@ -40,7 +40,7 @@ namespace rptr.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("RefreshTokenEncrypted");
 
-                    b.Property<DateTime>("RefreshTokenExpiresAt")
+                    b.Property<DateTime?>("RefreshTokenExpiresAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Scope")
