@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
-using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -16,6 +15,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using rptr.Services.Spotify;
 
 namespace rptr.Services.Authorization;
 
@@ -32,7 +32,7 @@ public class AuthService : IAuthService
 
     private readonly ILogger<AuthService> _logger;
     private readonly DataContext _dbContext;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ISpotifyHttpClient _spotifyHttpClient;
     private readonly IMemoryCache _memoryCache;
     private readonly SpotifySettings _spotifySettings;
     private readonly AuthRedirectSettings _authRedirectSettings;
@@ -43,7 +43,7 @@ public class AuthService : IAuthService
     public AuthService(
         ILogger<AuthService> logger,
         DataContext dbContext,
-        IHttpClientFactory httpClientFactory,
+        ISpotifyHttpClient spotifyHttpClient,
         IMemoryCache memoryCache,
         IOptions<SpotifySettings> spotifySettings,
         IOptions<AuthRedirectSettings> authRedirectSettings,
@@ -51,7 +51,7 @@ public class AuthService : IAuthService
     {
         _logger = logger;
         _dbContext = dbContext;
-        _httpClientFactory = httpClientFactory;
+        _spotifyHttpClient = spotifyHttpClient;
         _memoryCache = memoryCache;
         _spotifySettings = spotifySettings.Value;
         _authRedirectSettings = authRedirectSettings.Value;
@@ -225,7 +225,7 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Exchanging Spotify authorization code for tokens.");
 
-        using var response = await SendSpotifyAsync(
+        using var response = await _spotifyHttpClient.SendAsync(
             () =>
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, "https://accounts.spotify.com/api/token")
@@ -269,7 +269,7 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Refreshing Spotify access token for user {UserId}.", token.UserId);
 
-        using var response = await SendSpotifyAsync(
+        using var response = await _spotifyHttpClient.SendAsync(
             () =>
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, "https://accounts.spotify.com/api/token")
@@ -313,7 +313,7 @@ public class AuthService : IAuthService
     {
         _logger.LogInformation("Fetching current Spotify user profile.");
 
-        using var response = await SendSpotifyAsync(
+        using var response = await _spotifyHttpClient.SendAsync(
             () =>
             {
                 var request = new HttpRequestMessage(HttpMethod.Get, "https://api.spotify.com/v1/me");
@@ -403,87 +403,6 @@ public class AuthService : IAuthService
         return user;
     }
 
-    private async Task<HttpResponseMessage> SendSpotifyAsync(
-        Func<HttpRequestMessage> requestFactory,
-        CancellationToken cancellationToken)
-    {
-        var httpClient = _httpClientFactory.CreateClient();
-
-        for (var attempt = 0; attempt < 4; attempt++)
-        {
-            using var request = requestFactory();
-            var endpoint = request.RequestUri?.GetLeftPart(UriPartial.Path) ?? "unknown Spotify endpoint";
-            var response = await httpClient.SendAsync(request, cancellationToken);
-
-            if (response.StatusCode != HttpStatusCode.TooManyRequests
-                && (int)response.StatusCode < 500)
-            {
-                if (response.IsSuccessStatusCode)
-                {
-                    _logger.LogDebug(
-                        "Spotify request succeeded. Method: {Method}. Endpoint: {Endpoint}. StatusCode: {StatusCode}.",
-                        request.Method,
-                        endpoint,
-                        (int)response.StatusCode);
-                    return response;
-                }
-
-                var error = await ReadSpotifyErrorAsync(response, cancellationToken);
-                _logger.LogWarning(
-                    "Spotify request failed without retry. Method: {Method}. Endpoint: {Endpoint}. StatusCode: {StatusCode}. Error: {Error}.",
-                    request.Method,
-                    endpoint,
-                    (int)response.StatusCode,
-                    error);
-                throw new InvalidOperationException(error);
-            }
-
-            if (attempt == 3)
-            {
-                var error = await ReadSpotifyErrorAsync(response, cancellationToken);
-                _logger.LogWarning(
-                    "Spotify request failed after retries. Method: {Method}. Endpoint: {Endpoint}. StatusCode: {StatusCode}. Error: {Error}.",
-                    request.Method,
-                    endpoint,
-                    (int)response.StatusCode,
-                    error);
-                throw new InvalidOperationException(error);
-            }
-
-            var delay = GetRetryDelay(response, attempt);
-            _logger.LogWarning(
-                "Spotify request will be retried. Method: {Method}. Endpoint: {Endpoint}. StatusCode: {StatusCode}. Attempt: {Attempt}. Delay: {Delay}.",
-                request.Method,
-                endpoint,
-                (int)response.StatusCode,
-                attempt + 1,
-                delay);
-            response.Dispose();
-            await Task.Delay(delay, cancellationToken);
-        }
-
-        throw new InvalidOperationException("Spotify request failed.");
-    }
-
-    private static TimeSpan GetRetryDelay(HttpResponseMessage response, int attempt)
-    {
-        if (response.Headers.RetryAfter?.Delta is { } delta)
-        {
-            return delta;
-        }
-
-        if (response.Headers.RetryAfter?.Date is { } date)
-        {
-            var delay = date - DateTimeOffset.UtcNow;
-            if (delay > TimeSpan.Zero)
-            {
-                return delay;
-            }
-        }
-
-        return TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
-    }
-
     private async Task<SpotifyTokenResponse> ReadSpotifyTokenResponseAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
@@ -500,47 +419,6 @@ public class AuthService : IAuthService
         }
 
         return tokenResponse;
-    }
-
-    private static async Task<string> ReadSpotifyErrorAsync(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
-    {
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            return $"Spotify request failed with HTTP {(int)response.StatusCode}.";
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(body);
-            var root = document.RootElement;
-
-            if (root.TryGetProperty("error_description", out var description))
-            {
-                return description.GetString() ?? body;
-            }
-
-            if (root.TryGetProperty("error", out var error))
-            {
-                if (error.ValueKind == JsonValueKind.String)
-                {
-                    return error.GetString() ?? body;
-                }
-
-                if (error.TryGetProperty("message", out var message))
-                {
-                    return message.GetString() ?? body;
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            return body;
-        }
-
-        return body;
     }
 
     private AuthenticationHeaderValue CreateSpotifyBasicAuthHeader()
