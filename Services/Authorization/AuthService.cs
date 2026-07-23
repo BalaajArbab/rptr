@@ -128,8 +128,8 @@ public class AuthService : IAuthService
                 user.Id);
 
             return new SpotifyCallbackResult(QueryHelpers.AddQueryString(
-                _authRedirectSettings.SuccessUri,
-                "code",
+                _authRedirectSettings.SuccessUri!,
+                "handoffCode",
                 handoffCode));
         }
         catch (Exception ex)
@@ -442,7 +442,7 @@ public class AuthService : IAuthService
     private SpotifyCallbackResult FailureRedirect(string error)
     {
         return new SpotifyCallbackResult(QueryHelpers.AddQueryString(
-            _authRedirectSettings.FailureUri,
+            _authRedirectSettings.FailureUri!,
             "error",
             error));
     }
