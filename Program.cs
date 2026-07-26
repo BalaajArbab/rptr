@@ -68,6 +68,7 @@ builder.Services.AddOpenApi(options =>
     options.AddOperationTransformer((operation, context, cancellationToken) =>
     {
         var metadata = context.Description.ActionDescriptor.EndpointMetadata;
+        var endpointName = context.Description.ActionDescriptor.AttributeRouteInfo?.Name;
 
         var requiresAuthorization = metadata.OfType<IAuthorizeData>().Any();
         var allowsAnonymous = metadata.OfType<IAllowAnonymous>().Any();
@@ -80,6 +81,43 @@ builder.Services.AddOpenApi(options =>
             {
                 [new OpenApiSecuritySchemeReference("Bearer", context.Document)] = []
             });
+        }
+
+        if (endpointName is "StartSpotifyLogin" or "HandleSpotifyCallback"
+            && operation.Responses is { } responses)
+        {
+            var isLogin = endpointName == "StartSpotifyLogin";
+
+            responses["302"] = new OpenApiResponse
+            {
+                Description = isLogin
+                    ? "Redirects the browser to Spotify authorization."
+                    : "Redirects the browser to the frontend authentication result page.",
+                Headers = new Dictionary<string, IOpenApiHeader>
+                {
+                    ["Location"] = new OpenApiHeader
+                    {
+                        Description = isLogin
+                            ? "Spotify authorization URL."
+                            : "Frontend authentication result URL.",
+                        Schema = new OpenApiSchema
+                        {
+                            Type = JsonSchemaType.String,
+                            Format = "uri"
+                        }
+                    },
+                    ["Set-Cookie"] = new OpenApiHeader
+                    {
+                        Description = isLogin
+                            ? "Sets the short-lived HttpOnly state-validation cookie."
+                            : "Expires the state-validation cookie.",
+                        Schema = new OpenApiSchema
+                        {
+                            Type = JsonSchemaType.String
+                        }
+                    }
+                }
+            };
         }
 
         return Task.CompletedTask;

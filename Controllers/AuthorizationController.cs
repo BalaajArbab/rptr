@@ -21,6 +21,7 @@ namespace rptr.Controllers
 
         [AllowAnonymous]
         [HttpGet("login", Name = "StartSpotifyLogin")]
+        [ProducesResponseType(StatusCodes.Status302Found)]
         public IActionResult Login()
         {
             var login = _authService.CreateLoginRedirect();
@@ -42,6 +43,7 @@ namespace rptr.Controllers
 
         [AllowAnonymous]
         [HttpGet("callback", Name = "HandleSpotifyCallback")]
+        [ProducesResponseType(StatusCodes.Status302Found)]
         public async Task<IActionResult> Callback(
             [FromQuery] string? code,
             [FromQuery] string? state,
