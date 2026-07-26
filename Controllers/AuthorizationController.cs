@@ -20,7 +20,7 @@ namespace rptr.Controllers
         }
 
         [AllowAnonymous]
-        [HttpGet("login")]
+        [HttpGet("login", Name = "StartSpotifyLogin")]
         public IActionResult Login()
         {
             var login = _authService.CreateLoginRedirect();
@@ -41,7 +41,7 @@ namespace rptr.Controllers
         }
 
         [AllowAnonymous]
-        [HttpGet("callback")]
+        [HttpGet("callback", Name = "HandleSpotifyCallback")]
         public async Task<IActionResult> Callback(
             [FromQuery] string? code,
             [FromQuery] string? state,
@@ -69,7 +69,7 @@ namespace rptr.Controllers
         }
 
         [AllowAnonymous]
-        [HttpPost("session")]
+        [HttpPost("session", Name = "CreateAuthSession")]
         public async Task<ActionResult<AuthSessionResponse>> Session(
             [FromBody] AuthSessionRequest request,
             CancellationToken cancellationToken)
@@ -84,7 +84,7 @@ namespace rptr.Controllers
         }
 
         [Authorize]
-        [HttpPost("spotify-token")]
+        [HttpPost("spotify-token", Name = "GetSpotifyAccessToken")]
         public async Task<ActionResult<SpotifyAccessTokenResponse>> SpotifyToken(CancellationToken cancellationToken)
         {
             var token = await _authService.GetSpotifyAccessTokenAsync(User, cancellationToken);
