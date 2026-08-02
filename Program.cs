@@ -64,7 +64,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddOpenApi(options =>
 {
-    options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+    options.AddDocumentTransformer<BackendBearerSecuritySchemeTransformer>();
 
     options.AddOperationTransformer((operation, context, cancellationToken) =>
     {
@@ -74,13 +74,17 @@ builder.Services.AddOpenApi(options =>
         var requiresAuthorization = metadata.OfType<IAuthorizeData>().Any();
         var allowsAnonymous = metadata.OfType<IAllowAnonymous>().Any();
 
-        if (requiresAuthorization && !allowsAnonymous)
+        if (allowsAnonymous)
+        {
+            operation.Security = [];
+        }
+        else if (requiresAuthorization)
         {
             operation.Security ??= new List<OpenApiSecurityRequirement>();
 
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference("Bearer", context.Document)] = []
+                [new OpenApiSecuritySchemeReference("BackendBearer", context.Document)] = []
             });
         }
 
@@ -189,7 +193,7 @@ if (app.Environment.IsDevelopment())
 		options.WithTitle("rptr api")
 		.ExpandAllTags()
 		.WithTheme(ScalarTheme.BluePlanet)
-        .AddPreferredSecuritySchemes("Bearer")
+        .AddPreferredSecuritySchemes("BackendBearer")
         .EnablePersistentAuthentication();
 	});
 }
@@ -204,7 +208,7 @@ app.MapControllers();
 
 app.Run();
 
-internal sealed class BearerSecuritySchemeTransformer(IAuthenticationSchemeProvider authenticationSchemeProvider) : IOpenApiDocumentTransformer
+internal sealed class BackendBearerSecuritySchemeTransformer(IAuthenticationSchemeProvider authenticationSchemeProvider) : IOpenApiDocumentTransformer
 {
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
     {
@@ -213,12 +217,13 @@ internal sealed class BearerSecuritySchemeTransformer(IAuthenticationSchemeProvi
         {
             var securitySchemes = new Dictionary<string, IOpenApiSecurityScheme>
             {
-                ["Bearer"] = new OpenApiSecurityScheme
+                ["BackendBearer"] = new OpenApiSecurityScheme
                 {
                     Type = SecuritySchemeType.Http,
-                    Scheme = "bearer", // "bearer" refers to the header name here
+                    Scheme = "bearer",
                     In = ParameterLocation.Header,
-                    BearerFormat = "Json Web Token"
+                    BearerFormat = "JWT",
+                    Description = "Backend JWT returned by the session endpoint. Spotify access tokens are not accepted."
                 }
             };
             document.Components ??= new OpenApiComponents();
