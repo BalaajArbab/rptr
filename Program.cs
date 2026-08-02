@@ -120,6 +120,38 @@ builder.Services.AddOpenApi(options =>
             };
         }
 
+        if (operation.Responses is { } documentedResponses)
+        {
+            var responseDescriptions = endpointName switch
+            {
+                "CreateAuthSession" => new Dictionary<string, string>
+                {
+                    ["200"] = "The handoff code was consumed and the authenticated session details are returned.",
+                    ["400"] = "The request body is missing or malformed.",
+                    ["401"] = "The handoff code is missing, invalid, expired, already consumed, or no longer maps to a valid user and Spotify token.",
+                    ["500"] = "An unexpected backend failure occurred, including an unrecoverable Spotify token refresh failure."
+                },
+                "GetSpotifyAccessToken" => new Dictionary<string, string>
+                {
+                    ["200"] = "A current Spotify access token is returned.",
+                    ["401"] = "The backend JWT is missing, invalid, or expired, or the authenticated user has no stored Spotify token.",
+                    ["500"] = "An unexpected backend failure occurred, including an unrecoverable Spotify token refresh failure."
+                },
+                _ => null
+            };
+
+            if (responseDescriptions is not null)
+            {
+                foreach (var (statusCode, description) in responseDescriptions)
+                {
+                    if (documentedResponses.TryGetValue(statusCode, out var response))
+                    {
+                        response.Description = description;
+                    }
+                }
+            }
+        }
+
         return Task.CompletedTask;
     });
 });
