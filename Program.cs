@@ -21,6 +21,7 @@ builder.Services
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(
             new JsonStringEnumConverter()));
+builder.Services.AddProblemDetails();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -147,6 +148,23 @@ builder.Services.AddOpenApi(options =>
                     if (documentedResponses.TryGetValue(statusCode, out var response))
                     {
                         response.Description = description;
+
+                        if (statusCode != "200"
+                            && response.Content is { Count: > 0 } content)
+                        {
+                            var schema = content.Values
+                                .Select(mediaType => mediaType.Schema)
+                                .FirstOrDefault(candidate => candidate is not null);
+
+                            if (schema is not null)
+                            {
+                                content.Clear();
+                                content["application/problem+json"] = new OpenApiMediaType
+                                {
+                                    Schema = schema
+                                };
+                            }
+                        }
                     }
                 }
             }
@@ -158,6 +176,9 @@ builder.Services.AddOpenApi(options =>
 
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

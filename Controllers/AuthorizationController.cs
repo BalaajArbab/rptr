@@ -88,8 +88,8 @@ namespace rptr.Controllers
             "must not be retried automatically. This endpoint does not create or refresh a persistent session cookie.")]
         [ProducesResponseType<AuthSessionResponse>(StatusCodes.Status200OK)]
         [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(void), StatusCodes.Status401Unauthorized)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<AuthSessionResponse>> Session(
             [FromBody] AuthSessionRequest request,
             CancellationToken cancellationToken)
@@ -110,8 +110,8 @@ namespace rptr.Controllers
             "Returns the authenticated user's Spotify access token, refreshing it server-side when it is expired or close to expiry. " +
             "The Spotify refresh token is never returned.")]
         [ProducesResponseType<SpotifyAccessTokenResponse>(StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(void), StatusCodes.Status401Unauthorized)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<SpotifyAccessTokenResponse>> SpotifyToken(CancellationToken cancellationToken)
         {
             var token = await _authService.GetSpotifyAccessTokenAsync(User, cancellationToken);
