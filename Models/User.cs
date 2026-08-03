@@ -9,6 +9,7 @@ public class User
 {
     public int Id { get; set; }
     public string SpotifyAccountId { get; set; } = string.Empty;
+    public string AccountName { get; set; } = string.Empty;
     public string Country { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string SpotifyProfileUrl { get; set; } = string.Empty;

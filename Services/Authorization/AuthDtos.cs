@@ -33,6 +33,7 @@ public sealed record SpotifyAccessTokenResponse(
 public sealed record AuthUserResponse(
     int Id,
     string SpotifyAccountId,
+    string AccountName,
     string DisplayName,
     string Country,
     string SpotifyProfileUrl,

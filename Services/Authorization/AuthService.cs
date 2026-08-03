@@ -361,6 +361,7 @@ public class AuthService : IAuthService
             _dbContext.Users.Add(user);
         }
 
+        user.AccountName = profile.AccountName ?? string.Empty;
         user.Country = profile.Country ?? string.Empty;
         user.DisplayName = profile.DisplayName ?? string.Empty;
         user.SpotifyProfileUrl = profile.ExternalUrls?.Spotify ?? string.Empty;
@@ -488,6 +489,7 @@ public class AuthService : IAuthService
         return new AuthUserResponse(
             user.Id,
             user.SpotifyAccountId,
+            user.AccountName,
             user.DisplayName,
             user.Country,
             user.SpotifyProfileUrl,
@@ -522,6 +524,9 @@ public class AuthService : IAuthService
     {
         [JsonPropertyName("account_id")]
         public string AccountId { get; set; } = string.Empty;
+
+        [JsonPropertyName("id")]
+        public string? AccountName { get; set; }
 
         [JsonPropertyName("country")]
         public string? Country { get; set; }
