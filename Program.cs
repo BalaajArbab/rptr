@@ -173,8 +173,7 @@ builder.Services.AddOpenApi(options =>
                     {
                         response.Description = description;
 
-                        if (statusCode != "200"
-                            && response.Content is { Count: > 0 } content)
+                        if (response.Content is { Count: > 0 } content)
                         {
                             var schema = content.Values
                                 .Select(mediaType => mediaType.Schema)
@@ -182,8 +181,12 @@ builder.Services.AddOpenApi(options =>
 
                             if (schema is not null)
                             {
+                                var contentType = statusCode == "200"
+                                    ? "application/json"
+                                    : "application/problem+json";
+
                                 content.Clear();
-                                content["application/problem+json"] = new OpenApiMediaType
+                                content[contentType] = new OpenApiMediaType
                                 {
                                     Schema = schema
                                 };
