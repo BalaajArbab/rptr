@@ -66,6 +66,26 @@ builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer<BackendBearerSecuritySchemeTransformer>();
 
+    options.AddSchemaTransformer((schema, context, cancellationToken) =>
+    {
+        var property = context.JsonPropertyInfo;
+
+        if (property?.DeclaringType == typeof(AuthSessionRequest)
+            && property.Name == "code")
+        {
+            schema.MinLength = 22;
+            schema.MaxLength = 22;
+            schema.Pattern = "^[A-Za-z0-9_-]{22}$";
+        }
+        else if (property?.DeclaringType == typeof(AuthSessionResponse)
+            && property.Name == "tokenType")
+        {
+            schema.Enum = ["Bearer"];
+        }
+
+        return Task.CompletedTask;
+    });
+
     options.AddOperationTransformer((operation, context, cancellationToken) =>
     {
         var metadata = context.Description.ActionDescriptor.EndpointMetadata;

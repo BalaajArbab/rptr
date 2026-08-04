@@ -290,6 +290,7 @@ public class AuthService : IAuthService
         token.AccessToken = refreshedToken.AccessToken;
         token.ExpiresAt = DateTime.UtcNow.AddSeconds(refreshedToken.ExpiresIn);
 
+        // Refresh-token rotation does not restart Spotify's six-month authorization lifetime.
         if (!string.IsNullOrWhiteSpace(refreshedToken.RefreshToken))
         {
             token.RefreshToken = refreshedToken.RefreshToken;
@@ -348,7 +349,6 @@ public class AuthService : IAuthService
             .SingleOrDefaultAsync(u => u.SpotifyAccountId == profile.AccountId, cancellationToken);
 
         var isNewUser = user is null;
-        var isNewToken = user?.SpotifyToken is null;
 
         if (user is null)
         {
@@ -368,8 +368,13 @@ public class AuthService : IAuthService
         user.SpotifyImageUrl = profile.Images?.FirstOrDefault()?.Url ?? string.Empty;
         user.SubscriptionLevel = profile.Product ?? string.Empty;
 
-        var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
-        if (user.SpotifyToken is null)
+        var authorizedAt = DateTime.UtcNow;
+        var expiresAt = authorizedAt.AddSeconds(tokenResponse.ExpiresIn);
+        var refreshTokenExpiresAt = authorizedAt.AddMonths(6);
+        var hasNewRefreshToken = !string.IsNullOrWhiteSpace(tokenResponse.RefreshToken);
+        var isNewToken = user.SpotifyToken is null;
+
+        if (isNewToken)
         {
             user.SpotifyToken = new SpotifyToken
             {
@@ -377,29 +382,29 @@ public class AuthService : IAuthService
                 AccessToken = tokenResponse.AccessToken,
                 RefreshToken = tokenResponse.RefreshToken ?? string.Empty,
                 ExpiresAt = expiresAt,
+                RefreshTokenExpiresAt = hasNewRefreshToken ? refreshTokenExpiresAt : null,
                 Scope = tokenResponse.Scope ?? string.Join(' ', SpotifyScopes)
             };
         }
         else
         {
-            user.SpotifyToken.AccessToken = tokenResponse.AccessToken;
-            user.SpotifyToken.ExpiresAt = expiresAt;
-            user.SpotifyToken.Scope = tokenResponse.Scope ?? user.SpotifyToken.Scope;
+            var spotifyToken = user.SpotifyToken!;
+            spotifyToken.AccessToken = tokenResponse.AccessToken;
+            spotifyToken.ExpiresAt = expiresAt;
+            spotifyToken.Scope = tokenResponse.Scope ?? spotifyToken.Scope;
 
-            if (!string.IsNullOrWhiteSpace(tokenResponse.RefreshToken))
+            if (hasNewRefreshToken)
             {
-                user.SpotifyToken.RefreshToken = tokenResponse.RefreshToken;
+                spotifyToken.RefreshToken = tokenResponse.RefreshToken!;
+                spotifyToken.RefreshTokenExpiresAt = refreshTokenExpiresAt;
             }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Persisted Spotify auth data for user {UserId}. SpotifyAccountId: {SpotifyAccountId}. CreatedUser: {CreatedUser}. CreatedToken: {CreatedToken}.",
-            user.Id,
-            user.SpotifyAccountId,
-            isNewUser,
-            isNewToken);
+            $"Persisted Spotify auth data for user {user.Id}. SpotifyAccountId: {user.SpotifyAccountId}. " +
+            $"CreatedUser: {isNewUser}. CreatedTokenInDB: {isNewToken}.");
 
         return user;
     }

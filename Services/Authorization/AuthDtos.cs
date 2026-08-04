@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace rptr.Services.Authorization;
 
 public sealed record SpotifyLoginRedirect(
@@ -31,6 +33,7 @@ public sealed record SpotifyAccessTokenResponse(
     string SpotifyScopes);
 
 public sealed record AuthUserResponse(
+    [property: JsonNumberHandling(JsonNumberHandling.Strict)]
     int Id,
     string SpotifyAccountId,
     string AccountName,
