@@ -366,3 +366,4 @@ FodyWeavers.xsd
 appsettings*
 .vscode
 AGENTS.md
+.codex-build
