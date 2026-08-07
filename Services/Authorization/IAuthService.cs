@@ -13,4 +13,5 @@ public interface IAuthService
     Task<SpotifyCallbackResult> HandleCallbackAsync(SpotifyCallbackRequest request, CancellationToken cancellationToken = default);
     Task<AuthSessionResponse?> CreateSessionAsync(string handoffCode, CancellationToken cancellationToken = default);
     Task<SpotifyAccessTokenResponse?> GetSpotifyAccessTokenAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default);
+    Task<SpotifyAccessTokenResponse?> GetSpotifyAccessTokenAsync(int userId, CancellationToken cancellationToken = default);
 }

@@ -26,6 +26,7 @@ public class AuthService : IAuthService
     [
         "streaming",
         "user-read-private",
+        "user-read-email",
         "user-read-playback-state",
         "user-modify-playback-state"
     ];
@@ -196,6 +197,19 @@ public class AuthService : IAuthService
         if (!int.TryParse(userIdValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var userId))
         {
             _logger.LogWarning("Spotify access token request failed because the authenticated principal had no valid user id claim.");
+            return null;
+        }
+
+        return await GetSpotifyAccessTokenAsync(userId, cancellationToken);
+    }
+
+    public async Task<SpotifyAccessTokenResponse?> GetSpotifyAccessTokenAsync(
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (userId <= 0)
+        {
+            _logger.LogWarning("Spotify access token request failed because the user id was invalid.");
             return null;
         }
 

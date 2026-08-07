@@ -22,6 +22,85 @@ namespace rptr.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("rptr.Models.Playlist", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LastAccessed")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("OwnerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SpotifyPlaylistId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.HasIndex("SpotifyPlaylistId")
+                        .IsUnique();
+
+                    b.ToTable("Playlists");
+                });
+
+            modelBuilder.Entity("rptr.Models.Snippet", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("OriginalSongLengthMs")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlaylistId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PrimaryArtistName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SongId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("SongName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaylistId", "SongId")
+                        .IsUnique();
+
+                    b.ToTable("Snippets", t =>
+                        {
+                            t.HasCheckConstraint("CK_Snippets_OriginalSongLengthMs_Positive", "[OriginalSongLengthMs] > 0");
+                        });
+                });
+
             modelBuilder.Entity("rptr.Models.SpotifyToken", b =>
                 {
                     b.Property<int>("UserId")
@@ -99,6 +178,80 @@ namespace rptr.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("rptr.Models.Playlist", b =>
+                {
+                    b.HasOne("rptr.Models.User", "OwnerUser")
+                        .WithMany("OwnedPlaylists")
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsMany("rptr.Models.PlaylistTag", "Tags", b1 =>
+                        {
+                            b1.Property<int>("PlaylistId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAddOrUpdate();
+
+                            b1.Property<string>("Colour")
+                                .IsRequired();
+
+                            b1.Property<string>("Name")
+                                .IsRequired();
+
+                            b1.HasKey("PlaylistId", "__synthesizedOrdinal");
+
+                            b1.ToTable("Playlists");
+
+                            b1
+                                .ToJson("Tags")
+                                .HasColumnType("nvarchar(max)");
+
+                            b1.WithOwner()
+                                .HasForeignKey("PlaylistId");
+                        });
+
+                    b.Navigation("OwnerUser");
+
+                    b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("rptr.Models.Snippet", b =>
+                {
+                    b.HasOne("rptr.Models.Playlist", "Playlist")
+                        .WithMany("Snippets")
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsMany("rptr.Models.SnippetSegment", "Segments", b1 =>
+                        {
+                            b1.Property<int>("SnippetId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAddOrUpdate();
+
+                            b1.Property<int>("EndMs");
+
+                            b1.Property<int>("StartMs");
+
+                            b1.HasKey("SnippetId", "__synthesizedOrdinal");
+
+                            b1.ToTable("Snippets");
+
+                            b1
+                                .ToJson("Segments")
+                                .HasColumnType("nvarchar(max)");
+
+                            b1.WithOwner()
+                                .HasForeignKey("SnippetId");
+                        });
+
+                    b.Navigation("Playlist");
+
+                    b.Navigation("Segments");
+                });
+
             modelBuilder.Entity("rptr.Models.SpotifyToken", b =>
                 {
                     b.HasOne("rptr.Models.User", "User")
@@ -110,8 +263,15 @@ namespace rptr.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("rptr.Models.Playlist", b =>
+                {
+                    b.Navigation("Snippets");
+                });
+
             modelBuilder.Entity("rptr.Models.User", b =>
                 {
+                    b.Navigation("OwnedPlaylists");
+
                     b.Navigation("SpotifyToken");
                 });
 #pragma warning restore 612, 618

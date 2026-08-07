@@ -11,6 +11,8 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using rptr.Services.Authorization;
+using rptr.Services.Playlists;
+using rptr.Services.Snippets;
 using rptr.Services.Spotify;
 using Scalar.AspNetCore;
 
@@ -54,6 +56,8 @@ builder.Services.AddDataProtection();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<ISnippetService, SnippetService>();
 builder.Services.AddScoped<ISpotifyHttpClient, SpotifyHttpClient>();
 builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("SpotifySettings"));
 builder.Services.Configure<AuthRedirectSettings>(builder.Configuration.GetSection("AuthRedirects"));

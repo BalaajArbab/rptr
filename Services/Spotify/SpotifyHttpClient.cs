@@ -48,7 +48,9 @@ public sealed class SpotifyHttpClient : ISpotifyHttpClient
                     endpoint,
                     (int)response.StatusCode,
                     error);
-                throw new InvalidOperationException(error);
+                var statusCode = response.StatusCode;
+                response.Dispose();
+                throw new SpotifyApiException(statusCode, error);
             }
 
             if (attempt == 3)
@@ -60,7 +62,9 @@ public sealed class SpotifyHttpClient : ISpotifyHttpClient
                     endpoint,
                     (int)response.StatusCode,
                     error);
-                throw new InvalidOperationException(error);
+                var statusCode = response.StatusCode;
+                response.Dispose();
+                throw new SpotifyApiException(statusCode, error);
             }
 
             var delay = GetRetryDelay(response, attempt);

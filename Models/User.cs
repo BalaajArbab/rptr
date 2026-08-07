@@ -17,5 +17,6 @@ public class User
     public string SubscriptionLevel { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public SpotifyToken? SpotifyToken { get; set; }
+    public List<Playlist> OwnedPlaylists { get; set; } = [];
 
 }
