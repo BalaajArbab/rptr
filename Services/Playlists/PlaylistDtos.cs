@@ -9,7 +9,7 @@ public sealed record PlaylistTagDto(
     string Colour);
 
 public sealed record UpdatePlaylistTagsRequest(
-    [param: MaxLength(6)]
+    [param: MaxLength(8)]
     IReadOnlyList<PlaylistTagDto> Tags);
 
 public sealed record PlaylistAccessResponse(

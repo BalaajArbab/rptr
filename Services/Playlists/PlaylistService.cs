@@ -293,12 +293,12 @@ public sealed class PlaylistService : IPlaylistService
             return new TagValidationResult(null, errors);
         }
 
-        if (tags.Count > 6)
+        if (tags.Count > 8)
         {
-            errors["tags"] = ["A playlist can have at most 6 tags."];
+            errors["tags"] = ["A playlist can have at most 8 tags."];
         }
 
-        var normalized = new List<PlaylistTag>(Math.Min(tags.Count, 6));
+        var normalized = new List<PlaylistTag>(Math.Min(tags.Count, 8));
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (var index = 0; index < tags.Count; index++)
