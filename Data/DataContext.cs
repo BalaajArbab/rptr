@@ -18,6 +18,7 @@ public class DataContext : DbContext
     public DbSet<SpotifyToken> SpotifyTokens { get; set; }
     public DbSet<Playlist> Playlists { get; set; }
     public DbSet<Snippet> Snippets { get; set; }
+    public DbSet<SongTag> SongTags { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -105,6 +106,26 @@ public class DataContext : DbContext
             snippet.ToTable(table => table.HasCheckConstraint(
                 "CK_Snippets_OriginalSongLengthMs_Positive",
                 "[OriginalSongLengthMs] > 0"));
+        });
+
+        modelBuilder.Entity<SongTag>(songTag =>
+        {
+            songTag.HasIndex(s => new { s.PlaylistId, s.SongId }).IsUnique();
+            songTag.Property(s => s.SongId)
+                .IsRequired()
+                .HasMaxLength(128)
+                .UseCollation("Latin1_General_100_BIN2");
+            songTag.Property(s => s.SongName).IsRequired();
+            songTag.Property(s => s.PrimaryArtistName).IsRequired();
+            songTag.Property(s => s.Tags)
+                .IsRequired()
+                .HasColumnType("nvarchar(max)");
+
+            songTag
+                .HasOne(s => s.Playlist)
+                .WithMany(p => p.SongTags)
+                .HasForeignKey(s => s.PlaylistId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

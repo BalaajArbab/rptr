@@ -13,6 +13,7 @@ using Microsoft.OpenApi;
 using rptr.Services.Authorization;
 using rptr.Services.Playlists;
 using rptr.Services.Snippets;
+using rptr.Services.SongTags;
 using rptr.Services.Spotify;
 using Scalar.AspNetCore;
 
@@ -58,6 +59,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<ISnippetService, SnippetService>();
+builder.Services.AddScoped<ISongTagService, SongTagService>();
 builder.Services.AddScoped<ISpotifyHttpClient, SpotifyHttpClient>();
 builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("SpotifySettings"));
 builder.Services.Configure<AuthRedirectSettings>(builder.Configuration.GetSection("AuthRedirects"));
@@ -100,6 +102,18 @@ builder.Services.AddOpenApi(options =>
             && property.Name == "tokenType")
         {
             schema.Enum = ["Bearer"];
+        }
+        else if (property?.DeclaringType is not null
+            && (property.DeclaringType == typeof(PutSongTagsRequest)
+                || property.DeclaringType == typeof(SongTagsResponse))
+            && property.Name == "tags")
+        {
+            schema.MaxItems = 2;
+            schema.Items = new OpenApiSchema
+            {
+                Type = JsonSchemaType.String,
+                MaxLength = 9
+            };
         }
 
         return Task.CompletedTask;

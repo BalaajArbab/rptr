@@ -101,6 +101,43 @@ namespace rptr.Migrations
                         });
                 });
 
+            modelBuilder.Entity("rptr.Models.SongTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("PlaylistId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PrimaryArtistName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SongId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("SongName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.PrimitiveCollection<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaylistId", "SongId")
+                        .IsUnique();
+
+                    b.ToTable("SongTags");
+                });
+
             modelBuilder.Entity("rptr.Models.SpotifyToken", b =>
                 {
                     b.Property<int>("UserId")
@@ -252,6 +289,17 @@ namespace rptr.Migrations
                     b.Navigation("Segments");
                 });
 
+            modelBuilder.Entity("rptr.Models.SongTag", b =>
+                {
+                    b.HasOne("rptr.Models.Playlist", "Playlist")
+                        .WithMany("SongTags")
+                        .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Playlist");
+                });
+
             modelBuilder.Entity("rptr.Models.SpotifyToken", b =>
                 {
                     b.HasOne("rptr.Models.User", "User")
@@ -266,6 +314,8 @@ namespace rptr.Migrations
             modelBuilder.Entity("rptr.Models.Playlist", b =>
                 {
                     b.Navigation("Snippets");
+
+                    b.Navigation("SongTags");
                 });
 
             modelBuilder.Entity("rptr.Models.User", b =>

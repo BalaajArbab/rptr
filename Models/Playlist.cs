@@ -10,6 +10,7 @@ public class Playlist
     public List<PlaylistTag> Tags { get; set; } = [];
     public User OwnerUser { get; set; } = null!;
     public List<Snippet> Snippets { get; set; } = [];
+    public List<SongTag> SongTags { get; set; } = [];
 }
 
 public class PlaylistTag
