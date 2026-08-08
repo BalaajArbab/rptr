@@ -44,21 +44,38 @@ public sealed class SnippetService : ISnippetService
             return ServiceResult<SnippetResponse>.Failure(ServiceResultStatus.Forbidden);
         }
 
-        if (await _dbContext.Snippets.AnyAsync(
-                s => s.PlaylistId == playlist.Id && s.SongId == request.SongId,
-                cancellationToken))
+        var playlistSong = await _dbContext.PlaylistSongs
+            .Include(s => s.Snippet)
+            .SingleOrDefaultAsync(
+                s => s.PlaylistId == playlist.Id && s.SpotifySongId == request.SongId,
+                cancellationToken);
+
+        if (playlistSong?.Snippet is not null)
         {
             return ServiceResult<SnippetResponse>.Failure(ServiceResultStatus.Conflict);
         }
 
+        if (playlistSong is null)
+        {
+            playlistSong = new PlaylistSong
+            {
+                Playlist = playlist,
+                SpotifySongId = request.SongId,
+                Tags = null,
+                Excluded = false
+            };
+
+            _dbContext.PlaylistSongs.Add(playlistSong);
+        }
+
+        playlistSong.SongName = request.SongName.Trim();
+        playlistSong.PrimaryArtistName = request.PrimaryArtistName.Trim();
+        playlistSong.OriginalSongLengthMs = request.OriginalSongLengthMs;
+
         var snippet = new Snippet
         {
-            Playlist = playlist,
-            SongId = request.SongId,
+            PlaylistSong = playlistSong,
             Name = validation.Name!,
-            SongName = request.SongName,
-            PrimaryArtistName = request.PrimaryArtistName,
-            OriginalSongLengthMs = request.OriginalSongLengthMs,
             CreatedAt = DateTime.UtcNow,
             Segments = validation.Segments!
         };
@@ -78,7 +95,7 @@ public sealed class SnippetService : ISnippetService
             "Created snippet {SnippetId} for playlist {SpotifyPlaylistId}, song {SongId}, and owner {UserId}.",
             snippet.Id,
             playlist.SpotifyPlaylistId,
-            snippet.SongId,
+            playlistSong.SpotifySongId,
             userId);
 
         return ServiceResult<SnippetResponse>.Success(MapSnippet(snippet));
@@ -91,7 +108,8 @@ public sealed class SnippetService : ISnippetService
         CancellationToken cancellationToken = default)
     {
         var snippet = await _dbContext.Snippets
-            .Include(s => s.Playlist)
+            .Include(s => s.PlaylistSong)
+            .ThenInclude(s => s.Playlist)
             .SingleOrDefaultAsync(s => s.Id == snippetId, cancellationToken);
 
         if (snippet is null)
@@ -99,7 +117,7 @@ public sealed class SnippetService : ISnippetService
             return ServiceResult<SnippetResponse>.Failure(ServiceResultStatus.NotFound);
         }
 
-        if (snippet.Playlist.OwnerUserId != userId)
+        if (snippet.PlaylistSong.Playlist.OwnerUserId != userId)
         {
             return ServiceResult<SnippetResponse>.Failure(ServiceResultStatus.Forbidden);
         }
@@ -107,7 +125,7 @@ public sealed class SnippetService : ISnippetService
         var validation = ValidateNameAndSegments(
             request.Name,
             request.Segments,
-            snippet.OriginalSongLengthMs);
+            snippet.PlaylistSong.OriginalSongLengthMs!.Value);
 
         if (validation.Errors is not null)
         {
@@ -128,7 +146,8 @@ public sealed class SnippetService : ISnippetService
         CancellationToken cancellationToken = default)
     {
         var snippet = await _dbContext.Snippets
-            .Include(s => s.Playlist)
+            .Include(s => s.PlaylistSong)
+            .ThenInclude(s => s.Playlist)
             .SingleOrDefaultAsync(s => s.Id == snippetId, cancellationToken);
 
         if (snippet is null)
@@ -136,12 +155,20 @@ public sealed class SnippetService : ISnippetService
             return ServiceResult<bool>.Failure(ServiceResultStatus.NotFound);
         }
 
-        if (snippet.Playlist.OwnerUserId != userId)
+        if (snippet.PlaylistSong.Playlist.OwnerUserId != userId)
         {
             return ServiceResult<bool>.Failure(ServiceResultStatus.Forbidden);
         }
 
-        _dbContext.Snippets.Remove(snippet);
+        var playlistSong = snippet.PlaylistSong;
+        if (playlistSong.Tags is null && !playlistSong.Excluded)
+        {
+            _dbContext.PlaylistSongs.Remove(playlistSong);
+        }
+        else
+        {
+            _dbContext.Snippets.Remove(snippet);
+        }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Deleted snippet {SnippetId} by owner {UserId}.", snippetId, userId);
@@ -164,7 +191,8 @@ public sealed class SnippetService : ISnippetService
 
         var playlist = await _dbContext.Playlists
             .AsNoTracking()
-            .Include(p => p.Snippets)
+            .Include(p => p.Songs)
+            .ThenInclude(s => s.Snippet)
             .SingleOrDefaultAsync(
                 p => p.SpotifyPlaylistId == spotifyPlaylistId,
                 cancellationToken);
@@ -176,7 +204,9 @@ public sealed class SnippetService : ISnippetService
         }
 
         var canMutate = playlist.OwnerUserId == userId;
-        var snippets = playlist.Snippets
+        var snippets = playlist.Songs
+            .Where(s => s.Snippet is not null)
+            .Select(s => s.Snippet!)
             .OrderBy(s => s.CreatedAt)
             .ThenBy(s => s.Id)
             .Select(MapSnippet)
@@ -305,12 +335,12 @@ public sealed class SnippetService : ISnippetService
 
     private static SnippetResponse MapSnippet(Snippet snippet) => new(
         snippet.Id,
-        snippet.Playlist.SpotifyPlaylistId,
-        snippet.SongId,
+        snippet.PlaylistSong.Playlist.SpotifyPlaylistId,
+        snippet.PlaylistSong.SpotifySongId,
         snippet.Name,
-        snippet.SongName,
-        snippet.PrimaryArtistName,
-        snippet.OriginalSongLengthMs,
+        snippet.PlaylistSong.SongName,
+        snippet.PlaylistSong.PrimaryArtistName,
+        snippet.PlaylistSong.OriginalSongLengthMs!.Value,
         snippet.CreatedAt,
         snippet.Segments.Select(s => new SnippetSegmentDto(s.StartMs, s.EndMs)).ToArray());
 

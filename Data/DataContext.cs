@@ -17,8 +17,8 @@ public class DataContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<SpotifyToken> SpotifyTokens { get; set; }
     public DbSet<Playlist> Playlists { get; set; }
+    public DbSet<PlaylistSong> PlaylistSongs { get; set; }
     public DbSet<Snippet> Snippets { get; set; }
-    public DbSet<SongTag> SongTags { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,21 +79,38 @@ public class DataContext : DbContext
             });
         });
 
-        modelBuilder.Entity<Snippet>(snippet =>
+        modelBuilder.Entity<PlaylistSong>(song =>
         {
-            snippet.HasIndex(s => new { s.PlaylistId, s.SongId }).IsUnique();
-            snippet.Property(s => s.SongId)
+            song.HasIndex(s => new { s.PlaylistId, s.SpotifySongId }).IsUnique();
+            song.Property(s => s.SpotifySongId)
                 .IsRequired()
                 .HasMaxLength(128)
                 .UseCollation("Latin1_General_100_BIN2");
+            song.Property(s => s.SongName).IsRequired();
+            song.Property(s => s.PrimaryArtistName).IsRequired();
+            song.Property(s => s.Excluded).HasDefaultValue(false);
+            song.Property(s => s.Tags).HasColumnType("nvarchar(max)");
+
+            song
+                .HasOne(s => s.Playlist)
+                .WithMany(p => p.Songs)
+                .HasForeignKey(s => s.PlaylistId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            song.ToTable(table => table.HasCheckConstraint(
+                "CK_PlaylistSongs_OriginalSongLengthMs_Positive",
+                "[OriginalSongLengthMs] IS NULL OR [OriginalSongLengthMs] > 0"));
+        });
+
+        modelBuilder.Entity<Snippet>(snippet =>
+        {
+            snippet.HasIndex(s => s.PlaylistSongId).IsUnique();
             snippet.Property(s => s.Name).IsRequired();
-            snippet.Property(s => s.SongName).IsRequired();
-            snippet.Property(s => s.PrimaryArtistName).IsRequired();
 
             snippet
-                .HasOne(s => s.Playlist)
-                .WithMany(p => p.Snippets)
-                .HasForeignKey(s => s.PlaylistId)
+                .HasOne(s => s.PlaylistSong)
+                .WithOne(s => s.Snippet)
+                .HasForeignKey<Snippet>(s => s.PlaylistSongId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             snippet.OwnsMany(s => s.Segments, segments =>
@@ -102,30 +119,6 @@ public class DataContext : DbContext
                 segments.Property(s => s.StartMs).IsRequired();
                 segments.Property(s => s.EndMs).IsRequired();
             });
-
-            snippet.ToTable(table => table.HasCheckConstraint(
-                "CK_Snippets_OriginalSongLengthMs_Positive",
-                "[OriginalSongLengthMs] > 0"));
-        });
-
-        modelBuilder.Entity<SongTag>(songTag =>
-        {
-            songTag.HasIndex(s => new { s.PlaylistId, s.SongId }).IsUnique();
-            songTag.Property(s => s.SongId)
-                .IsRequired()
-                .HasMaxLength(128)
-                .UseCollation("Latin1_General_100_BIN2");
-            songTag.Property(s => s.SongName).IsRequired();
-            songTag.Property(s => s.PrimaryArtistName).IsRequired();
-            songTag.Property(s => s.Tags)
-                .IsRequired()
-                .HasColumnType("nvarchar(max)");
-
-            songTag
-                .HasOne(s => s.Playlist)
-                .WithMany(p => p.SongTags)
-                .HasForeignKey(s => s.PlaylistId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

@@ -55,6 +55,53 @@ namespace rptr.Migrations
                     b.ToTable("Playlists");
                 });
 
+            modelBuilder.Entity("rptr.Models.PlaylistSong", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Excluded")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<int?>("OriginalSongLengthMs")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PlaylistId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PrimaryArtistName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SongName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SpotifySongId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.PrimitiveCollection<string>("Tags")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaylistId", "SpotifySongId")
+                        .IsUnique();
+
+                    b.ToTable("PlaylistSongs", t =>
+                        {
+                            t.HasCheckConstraint("CK_PlaylistSongs_OriginalSongLengthMs_Positive", "[OriginalSongLengthMs] IS NULL OR [OriginalSongLengthMs] > 0");
+                        });
+                });
+
             modelBuilder.Entity("rptr.Models.Snippet", b =>
                 {
                     b.Property<int>("Id")
@@ -70,72 +117,15 @@ namespace rptr.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("OriginalSongLengthMs")
+                    b.Property<int>("PlaylistSongId")
                         .HasColumnType("int");
-
-                    b.Property<int>("PlaylistId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PrimaryArtistName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("SongId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .UseCollation("Latin1_General_100_BIN2");
-
-                    b.Property<string>("SongName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PlaylistId", "SongId")
+                    b.HasIndex("PlaylistSongId")
                         .IsUnique();
 
-                    b.ToTable("Snippets", t =>
-                        {
-                            t.HasCheckConstraint("CK_Snippets_OriginalSongLengthMs_Positive", "[OriginalSongLengthMs] > 0");
-                        });
-                });
-
-            modelBuilder.Entity("rptr.Models.SongTag", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("PlaylistId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PrimaryArtistName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("SongId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .UseCollation("Latin1_General_100_BIN2");
-
-                    b.Property<string>("SongName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.PrimitiveCollection<string>("Tags")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlaylistId", "SongId")
-                        .IsUnique();
-
-                    b.ToTable("SongTags");
+                    b.ToTable("Snippets");
                 });
 
             modelBuilder.Entity("rptr.Models.SpotifyToken", b =>
@@ -253,11 +243,22 @@ namespace rptr.Migrations
                     b.Navigation("Tags");
                 });
 
-            modelBuilder.Entity("rptr.Models.Snippet", b =>
+            modelBuilder.Entity("rptr.Models.PlaylistSong", b =>
                 {
                     b.HasOne("rptr.Models.Playlist", "Playlist")
-                        .WithMany("Snippets")
+                        .WithMany("Songs")
                         .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Playlist");
+                });
+
+            modelBuilder.Entity("rptr.Models.Snippet", b =>
+                {
+                    b.HasOne("rptr.Models.PlaylistSong", "PlaylistSong")
+                        .WithOne("Snippet")
+                        .HasForeignKey("rptr.Models.Snippet", "PlaylistSongId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -284,20 +285,9 @@ namespace rptr.Migrations
                                 .HasForeignKey("SnippetId");
                         });
 
-                    b.Navigation("Playlist");
+                    b.Navigation("PlaylistSong");
 
                     b.Navigation("Segments");
-                });
-
-            modelBuilder.Entity("rptr.Models.SongTag", b =>
-                {
-                    b.HasOne("rptr.Models.Playlist", "Playlist")
-                        .WithMany("SongTags")
-                        .HasForeignKey("PlaylistId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Playlist");
                 });
 
             modelBuilder.Entity("rptr.Models.SpotifyToken", b =>
@@ -313,9 +303,12 @@ namespace rptr.Migrations
 
             modelBuilder.Entity("rptr.Models.Playlist", b =>
                 {
-                    b.Navigation("Snippets");
+                    b.Navigation("Songs");
+                });
 
-                    b.Navigation("SongTags");
+            modelBuilder.Entity("rptr.Models.PlaylistSong", b =>
+                {
+                    b.Navigation("Snippet");
                 });
 
             modelBuilder.Entity("rptr.Models.User", b =>

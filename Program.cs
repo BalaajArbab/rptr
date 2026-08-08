@@ -12,8 +12,8 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using rptr.Services.Authorization;
 using rptr.Services.Playlists;
+using rptr.Services.PlaylistSongs;
 using rptr.Services.Snippets;
-using rptr.Services.SongTags;
 using rptr.Services.Spotify;
 using Scalar.AspNetCore;
 
@@ -58,8 +58,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddScoped<IPlaylistSongService, PlaylistSongService>();
 builder.Services.AddScoped<ISnippetService, SnippetService>();
-builder.Services.AddScoped<ISongTagService, SongTagService>();
 builder.Services.AddScoped<ISpotifyHttpClient, SpotifyHttpClient>();
 builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("SpotifySettings"));
 builder.Services.Configure<AuthRedirectSettings>(builder.Configuration.GetSection("AuthRedirects"));
@@ -105,7 +105,8 @@ builder.Services.AddOpenApi(options =>
         }
         else if (property?.DeclaringType is not null
             && (property.DeclaringType == typeof(PutSongTagsRequest)
-                || property.DeclaringType == typeof(SongTagsResponse))
+                || property.DeclaringType == typeof(SongTagsResponse)
+                || property.DeclaringType == typeof(PlaylistSongResponse))
             && property.Name == "tags")
         {
             schema.MaxItems = 2;
@@ -123,6 +124,11 @@ builder.Services.AddOpenApi(options =>
     {
         var metadata = context.Description.ActionDescriptor.EndpointMetadata;
         var endpointName = context.Description.ActionDescriptor.AttributeRouteInfo?.Name;
+
+        if (endpointName is "GetPlaylistSnippets" or "GetPlaylistSongTags")
+        {
+            operation.Deprecated = true;
+        }
 
         var requiresAuthorization = metadata.OfType<IAuthorizeData>().Any();
         var allowsAnonymous = metadata.OfType<IAllowAnonymous>().Any();

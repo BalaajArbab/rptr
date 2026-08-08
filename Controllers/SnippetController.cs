@@ -93,9 +93,10 @@ public sealed class SnippetController : ControllerBase
     }
 
     [HttpGet("playlist/{spotifyPlaylistId}", Name = "GetPlaylistSnippets")]
-    [EndpointSummary("Get a playlist's shared snippets")]
+    [EndpointSummary("Get a playlist's shared snippets (deprecated)")]
     [EndpointDescription(
-        "Returns all locally stored snippets for a Spotify playlist. Capability flags are computed for the authenticated user.")]
+        "Deprecated: use GET /api/playlist/{spotifyPlaylistId}/songs. " +
+        "Returns the legacy snippet-only response shape with capability flags.")]
     [ProducesResponseType<PlaylistSnippetsResponse>(StatusCodes.Status200OK, "application/json")]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]

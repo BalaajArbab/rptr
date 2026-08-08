@@ -9,8 +9,7 @@ public class Playlist
     public DateTime LastAccessed { get; set; }
     public List<PlaylistTag> Tags { get; set; } = [];
     public User OwnerUser { get; set; } = null!;
-    public List<Snippet> Snippets { get; set; } = [];
-    public List<SongTag> SongTags { get; set; } = [];
+    public List<PlaylistSong> Songs { get; set; } = [];
 }
 
 public class PlaylistTag

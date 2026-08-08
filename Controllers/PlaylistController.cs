@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using rptr.Services;
 using rptr.Services.Authorization;
 using rptr.Services.Playlists;
-using rptr.Services.SongTags;
+using rptr.Services.PlaylistSongs;
 
 namespace rptr.Controllers;
 
@@ -13,14 +13,14 @@ namespace rptr.Controllers;
 public sealed class PlaylistController : ControllerBase
 {
     private readonly IPlaylistService _playlistService;
-    private readonly ISongTagService _songTagService;
+    private readonly IPlaylistSongService _playlistSongService;
 
     public PlaylistController(
         IPlaylistService playlistService,
-        ISongTagService songTagService)
+        IPlaylistSongService playlistSongService)
     {
         _playlistService = playlistService;
-        _songTagService = songTagService;
+        _playlistSongService = playlistSongService;
     }
 
     [HttpPost("{spotifyPlaylistId}/access", Name = "AccessPlaylist")]
@@ -101,11 +101,38 @@ public sealed class PlaylistController : ControllerBase
             : MapFailure(result);
     }
 
-    [HttpGet("{spotifyPlaylistId}/songs/tags", Name = "GetPlaylistSongTags")]
-    [EndpointSummary("Get all song tags for a playlist")]
+    [HttpGet("{spotifyPlaylistId}/songs", Name = "GetPlaylistSongs")]
+    [EndpointSummary("Get all locally annotated songs for a playlist")]
     [EndpointDescription(
-        "Returns every locally stored song-tag entry for a Spotify playlist. " +
-        "Returns an empty array when the playlist or its song tags are not stored.")]
+        "Returns each song having a snippet, tags, or an exclusion, together with mutation capabilities for the authenticated user.")]
+    [ProducesResponseType<PlaylistSongsResponse>(StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json")]
+    public async Task<ActionResult<PlaylistSongsResponse>> GetSongs(
+        string spotifyPlaylistId,
+        CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out var userId))
+        {
+            return AuthenticationProblem();
+        }
+
+        var result = await _playlistSongService.GetForPlaylistAsync(
+            userId,
+            spotifyPlaylistId,
+            cancellationToken);
+
+        return result.Status == ServiceResultStatus.Success
+            ? Ok(result.Value)
+            : MapFailure(result);
+    }
+
+    [HttpGet("{spotifyPlaylistId}/songs/tags", Name = "GetPlaylistSongTags")]
+    [EndpointSummary("Get all song tags for a playlist (deprecated)")]
+    [EndpointDescription(
+        "Deprecated: use GET /api/playlist/{spotifyPlaylistId}/songs. " +
+        "Returns the legacy song-tag response shape for songs with tags.")]
     [ProducesResponseType<SongTagsResponse[]>(StatusCodes.Status200OK, "application/json")]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
@@ -114,7 +141,7 @@ public sealed class PlaylistController : ControllerBase
         string spotifyPlaylistId,
         CancellationToken cancellationToken)
     {
-        var result = await _songTagService.GetForPlaylistAsync(
+        var result = await _playlistSongService.GetTagsForPlaylistAsync(
             spotifyPlaylistId,
             cancellationToken);
 
@@ -127,7 +154,8 @@ public sealed class PlaylistController : ControllerBase
     [EndpointSummary("Replace a song's tags")]
     [EndpointDescription(
         "Creates or replaces the locally stored tags and metadata for a playlist song. " +
-        "An empty tag array deletes the stored row. Only the playlist owner may perform this operation.")]
+        "An empty tag array clears tags and removes the row only when no other annotation remains. " +
+        "Only the playlist owner may perform this operation.")]
     [ProducesResponseType<SongTagsResponse>(StatusCodes.Status200OK, "application/json")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
@@ -147,7 +175,7 @@ public sealed class PlaylistController : ControllerBase
             return AuthenticationProblem();
         }
 
-        var result = await _songTagService.PutAsync(
+        var result = await _playlistSongService.PutTagsAsync(
             userId,
             spotifyPlaylistId,
             songId,
@@ -156,12 +184,47 @@ public sealed class PlaylistController : ControllerBase
 
         if (result.Status != ServiceResultStatus.Success)
         {
-            return MapSongTagFailure(result);
+            return MapSongMutationFailure(result);
         }
 
         return result.Value is null
             ? NoContent()
             : Ok(result.Value);
+    }
+
+    [HttpPut("{spotifyPlaylistId}/songs/{songId}/excluded", Name = "PutSongExcluded")]
+    [EndpointSummary("Set whether a playlist song is excluded")]
+    [EndpointDescription(
+        "Creates or updates a playlist song's exclusion and metadata. " +
+        "Clearing the final annotation removes the local song row. Only the playlist owner may perform this operation.")]
+    [ProducesResponseType<SongExcludedResponse>(StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json")]
+    public async Task<ActionResult<SongExcludedResponse>> PutSongExcluded(
+        string spotifyPlaylistId,
+        string songId,
+        [FromBody] PutSongExcludedRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out var userId))
+        {
+            return AuthenticationProblem();
+        }
+
+        var result = await _playlistSongService.PutExcludedAsync(
+            userId,
+            spotifyPlaylistId,
+            songId,
+            request,
+            cancellationToken);
+
+        return result.Status == ServiceResultStatus.Success
+            ? Ok(result.Value)
+            : MapSongMutationFailure(result);
     }
 
     private ActionResult MapFailure<T>(ServiceResult<T> result) => result.Status switch
@@ -187,7 +250,7 @@ public sealed class PlaylistController : ControllerBase
             title: "An unexpected error occurred.")
     };
 
-    private ActionResult MapSongTagFailure(ServiceResult<SongTagsResponse?> result) =>
+    private ActionResult MapSongMutationFailure<T>(ServiceResult<T> result) =>
         result.Status switch
         {
             ServiceResultStatus.ValidationFailed => ValidationProblem(
@@ -202,7 +265,7 @@ public sealed class PlaylistController : ControllerBase
                 title: "The registered playlist was not found."),
             ServiceResultStatus.Conflict => Problem(
                 statusCode: StatusCodes.Status409Conflict,
-                title: "Song tags were created concurrently. Retry the request."),
+                title: "Song data was updated concurrently. Retry the request."),
             _ => Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "An unexpected error occurred.")
