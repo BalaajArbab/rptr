@@ -11,6 +11,8 @@ namespace rptr.Services.Playlists;
 
 public sealed class PlaylistService : IPlaylistService
 {
+    private const int MaximumTagCount = 10;
+
     private static readonly Regex HexColourPattern = new(
         "^#[0-9A-Fa-f]{6}$",
         RegexOptions.CultureInvariant);
@@ -293,12 +295,12 @@ public sealed class PlaylistService : IPlaylistService
             return new TagValidationResult(null, errors);
         }
 
-        if (tags.Count > 8)
+        if (tags.Count > MaximumTagCount)
         {
-            errors["tags"] = ["A playlist can have at most 8 tags."];
+            errors["tags"] = [$"A playlist can have at most {MaximumTagCount} tags."];
         }
 
-        var normalized = new List<PlaylistTag>(Math.Min(tags.Count, 8));
+        var normalized = new List<PlaylistTag>(Math.Min(tags.Count, MaximumTagCount));
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (var index = 0; index < tags.Count; index++)
