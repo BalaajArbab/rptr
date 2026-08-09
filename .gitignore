@@ -363,7 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 
 .agents
-appsettings*
+appsettings*.local.json
 .vscode
 AGENTS.md
 .codex-build
