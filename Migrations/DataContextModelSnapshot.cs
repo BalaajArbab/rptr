@@ -22,6 +22,37 @@ namespace rptr.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("rptr.Models.Feedback", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(45)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Feedback");
+                });
+
             modelBuilder.Entity("rptr.Models.Playlist", b =>
                 {
                     b.Property<int>("Id")
@@ -205,6 +236,17 @@ namespace rptr.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("rptr.Models.Feedback", b =>
+                {
+                    b.HasOne("rptr.Models.User", "User")
+                        .WithMany("FeedbackSubmissions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("rptr.Models.Playlist", b =>
                 {
                     b.HasOne("rptr.Models.User", "OwnerUser")
@@ -313,6 +355,8 @@ namespace rptr.Migrations
 
             modelBuilder.Entity("rptr.Models.User", b =>
                 {
+                    b.Navigation("FeedbackSubmissions");
+
                     b.Navigation("OwnedPlaylists");
 
                     b.Navigation("SpotifyToken");

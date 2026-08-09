@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using rptr.Endpoints;
 using rptr.Services.Authorization;
 using rptr.Services.Playlists;
 using rptr.Services.PlaylistSongs;
@@ -269,6 +270,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapFeedbackEndpoints();
 
 app.Run();
 

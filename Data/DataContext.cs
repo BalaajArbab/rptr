@@ -19,6 +19,7 @@ public class DataContext : DbContext
     public DbSet<Playlist> Playlists { get; set; }
     public DbSet<PlaylistSong> PlaylistSongs { get; set; }
     public DbSet<Snippet> Snippets { get; set; }
+    public DbSet<Feedback> Feedback { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -119,6 +120,22 @@ public class DataContext : DbContext
                 segments.Property(s => s.StartMs).IsRequired();
                 segments.Property(s => s.EndMs).IsRequired();
             });
+        });
+
+        modelBuilder.Entity<Feedback>(feedback =>
+        {
+            feedback.Property(f => f.Message)
+                .IsRequired()
+                .HasMaxLength(2000);
+            feedback.Property(f => f.IpAddress)
+                .HasMaxLength(45)
+                .IsUnicode(false);
+
+            feedback
+                .HasOne(f => f.User)
+                .WithMany(u => u.FeedbackSubmissions)
+                .HasForeignKey(f => f.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

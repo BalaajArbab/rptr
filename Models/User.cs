@@ -18,5 +18,6 @@ public class User
     public DateTime CreatedAt { get; set; }
     public SpotifyToken? SpotifyToken { get; set; }
     public List<Playlist> OwnedPlaylists { get; set; } = [];
+    public List<Feedback> FeedbackSubmissions { get; set; } = [];
 
 }
