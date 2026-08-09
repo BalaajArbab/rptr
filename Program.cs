@@ -1,4 +1,3 @@
-global using AutoMapper;
 global using Microsoft.EntityFrameworkCore;
 global using  dotnetrpg_again.Data;
 global using rptr.Models;
@@ -52,7 +51,6 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-builder.Services.AddAutoMapper(cfg => {}, typeof(Program).Assembly);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDataProtection();
 builder.Services.AddHttpClient();
