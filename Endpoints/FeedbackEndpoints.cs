@@ -30,6 +30,7 @@ public static class FeedbackEndpoints
         ClaimsPrincipal principal,
         HttpContext httpContext,
         DataContext db,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!principal.TryGetUserId(out var userId))
@@ -75,6 +76,13 @@ public static class FeedbackEndpoints
 
         db.Feedback.Add(feedback);
         await db.SaveChangesAsync(cancellationToken);
+
+        loggerFactory
+            .CreateLogger("Feedback")
+            .LogInformation(
+                "Feedback {FeedbackId} received from user {UserId}",
+                feedback.Id,
+                userId);
 
         return Results.Json(
             new CreateFeedbackResponse(feedback.Id, feedback.CreatedAt),
