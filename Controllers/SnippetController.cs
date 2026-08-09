@@ -92,34 +92,6 @@ public sealed class SnippetController : ControllerBase
             : MapFailure(result);
     }
 
-    [HttpGet("playlist/{spotifyPlaylistId}", Name = "GetPlaylistSnippets")]
-    [EndpointSummary("Get a playlist's shared snippets (deprecated)")]
-    [EndpointDescription(
-        "Deprecated: use GET /api/playlist/{spotifyPlaylistId}/songs. " +
-        "Returns the legacy snippet-only response shape with capability flags.")]
-    [ProducesResponseType<PlaylistSnippetsResponse>(StatusCodes.Status200OK, "application/json")]
-    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json")]
-    public async Task<ActionResult<PlaylistSnippetsResponse>> GetForPlaylist(
-        string spotifyPlaylistId,
-        CancellationToken cancellationToken)
-    {
-        if (!User.TryGetUserId(out var userId))
-        {
-            return AuthenticationProblem();
-        }
-
-        var result = await _snippetService.GetForPlaylistAsync(
-            userId,
-            spotifyPlaylistId,
-            cancellationToken);
-
-        return result.Status == ServiceResultStatus.Success
-            ? Ok(result.Value)
-            : MapFailure(result);
-    }
-
     private ActionResult MapFailure<T>(ServiceResult<T> result) => result.Status switch
     {
         ServiceResultStatus.ValidationFailed => ValidationProblem(

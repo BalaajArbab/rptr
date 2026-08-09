@@ -19,9 +19,4 @@ public interface ISnippetService
         int userId,
         int snippetId,
         CancellationToken cancellationToken = default);
-
-    Task<ServiceResult<PlaylistSnippetsResponse>> GetForPlaylistAsync(
-        int userId,
-        string spotifyPlaylistId,
-        CancellationToken cancellationToken = default);
 }

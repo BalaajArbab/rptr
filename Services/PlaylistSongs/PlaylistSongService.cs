@@ -54,32 +54,6 @@ public sealed class PlaylistSongService : IPlaylistSongService
             new PlaylistSongsResponse(canMutate, canMutate, songs));
     }
 
-    public async Task<ServiceResult<IReadOnlyList<SongTagsResponse>>> GetTagsForPlaylistAsync(
-        string spotifyPlaylistId,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(spotifyPlaylistId))
-        {
-            return ServiceResult<IReadOnlyList<SongTagsResponse>>.Validation(
-                PlaylistIdRequiredError());
-        }
-
-        var playlist = await _dbContext.Playlists
-            .AsNoTracking()
-            .Include(p => p.Songs)
-            .SingleOrDefaultAsync(
-                p => p.SpotifyPlaylistId == spotifyPlaylistId,
-                cancellationToken);
-
-        var songTags = playlist?.Songs
-            .Where(s => s.Tags is not null)
-            .OrderBy(s => s.Id)
-            .Select(s => MapTags(s, spotifyPlaylistId))
-            .ToArray() ?? [];
-
-        return ServiceResult<IReadOnlyList<SongTagsResponse>>.Success(songTags);
-    }
-
     public async Task<ServiceResult<SongTagsResponse?>> PutTagsAsync(
         int userId,
         string spotifyPlaylistId,

@@ -9,10 +9,6 @@ public interface IPlaylistSongService
         string spotifyPlaylistId,
         CancellationToken cancellationToken = default);
 
-    Task<ServiceResult<IReadOnlyList<SongTagsResponse>>> GetTagsForPlaylistAsync(
-        string spotifyPlaylistId,
-        CancellationToken cancellationToken = default);
-
     Task<ServiceResult<SongTagsResponse?>> PutTagsAsync(
         int userId,
         string spotifyPlaylistId,

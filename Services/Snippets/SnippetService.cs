@@ -175,47 +175,6 @@ public sealed class SnippetService : ISnippetService
         return ServiceResult<bool>.Success(true);
     }
 
-    public async Task<ServiceResult<PlaylistSnippetsResponse>> GetForPlaylistAsync(
-        int userId,
-        string spotifyPlaylistId,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(spotifyPlaylistId))
-        {
-            return ServiceResult<PlaylistSnippetsResponse>.Validation(
-                new Dictionary<string, string[]>
-                {
-                    ["spotifyPlaylistId"] = ["The Spotify playlist id is required."]
-                });
-        }
-
-        var playlist = await _dbContext.Playlists
-            .AsNoTracking()
-            .Include(p => p.Songs)
-            .ThenInclude(s => s.Snippet)
-            .SingleOrDefaultAsync(
-                p => p.SpotifyPlaylistId == spotifyPlaylistId,
-                cancellationToken);
-
-        if (playlist is null)
-        {
-            return ServiceResult<PlaylistSnippetsResponse>.Success(
-                new PlaylistSnippetsResponse(false, false, []));
-        }
-
-        var canMutate = playlist.OwnerUserId == userId;
-        var snippets = playlist.Songs
-            .Where(s => s.Snippet is not null)
-            .Select(s => s.Snippet!)
-            .OrderBy(s => s.CreatedAt)
-            .ThenBy(s => s.Id)
-            .Select(MapSnippet)
-            .ToArray();
-
-        return ServiceResult<PlaylistSnippetsResponse>.Success(
-            new PlaylistSnippetsResponse(canMutate, canMutate, snippets));
-    }
-
     private static CreateValidationResult ValidateCreateRequest(CreateSnippetRequest request)
     {
         var validation = ValidateNameAndSegments(

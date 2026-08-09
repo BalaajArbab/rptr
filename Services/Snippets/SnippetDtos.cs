@@ -32,8 +32,3 @@ public sealed record SnippetResponse(
     int OriginalSongLengthMs,
     DateTime CreatedAt,
     IReadOnlyList<SnippetSegmentDto> Segments);
-
-public sealed record PlaylistSnippetsResponse(
-    bool CanEdit,
-    bool CanDelete,
-    IReadOnlyList<SnippetResponse> Snippets);

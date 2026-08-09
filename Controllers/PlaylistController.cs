@@ -128,28 +128,6 @@ public sealed class PlaylistController : ControllerBase
             : MapFailure(result);
     }
 
-    [HttpGet("{spotifyPlaylistId}/songs/tags", Name = "GetPlaylistSongTags")]
-    [EndpointSummary("Get all song tags for a playlist (deprecated)")]
-    [EndpointDescription(
-        "Deprecated: use GET /api/playlist/{spotifyPlaylistId}/songs. " +
-        "Returns the legacy song-tag response shape for songs with tags.")]
-    [ProducesResponseType<SongTagsResponse[]>(StatusCodes.Status200OK, "application/json")]
-    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json")]
-    public async Task<ActionResult<IReadOnlyList<SongTagsResponse>>> GetSongTags(
-        string spotifyPlaylistId,
-        CancellationToken cancellationToken)
-    {
-        var result = await _playlistSongService.GetTagsForPlaylistAsync(
-            spotifyPlaylistId,
-            cancellationToken);
-
-        return result.Status == ServiceResultStatus.Success
-            ? Ok(result.Value)
-            : MapFailure(result);
-    }
-
     [HttpPut("{spotifyPlaylistId}/songs/{songId}/tags", Name = "PutSongTags")]
     [EndpointSummary("Replace a song's tags")]
     [EndpointDescription(

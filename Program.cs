@@ -126,11 +126,6 @@ builder.Services.AddOpenApi(options =>
         var metadata = context.Description.ActionDescriptor.EndpointMetadata;
         var endpointName = context.Description.ActionDescriptor.AttributeRouteInfo?.Name;
 
-        if (endpointName is "GetPlaylistSnippets" or "GetPlaylistSongTags")
-        {
-            operation.Deprecated = true;
-        }
-
         var requiresAuthorization = metadata.OfType<IAuthorizeData>().Any();
         var allowsAnonymous = metadata.OfType<IAllowAnonymous>().Any();
 
