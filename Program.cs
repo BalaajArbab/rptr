@@ -64,9 +64,21 @@ builder.Services.AddScoped<ISnippetService, SnippetService>();
 builder.Services.AddScoped<ISpotifyHttpClient, SpotifyHttpClient>();
 builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("SpotifySettings"));
 builder.Services.Configure<AuthRedirectSettings>(builder.Configuration.GetSection("AuthRedirects"));
+
+var connectionName = builder.Configuration["Database:ConnectionName"] ?? "AzureConnection";
+var connectionString = builder.Configuration.GetConnectionString(connectionName)
+    ?? throw new InvalidOperationException(
+        $"Connection string '{connectionName}' is not configured.");
+
 builder.Services.AddDbContext<DataContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.UseSqlServer(connectionString, sqlServerOptions =>
+    {
+        if (connectionName.Equals("AzureConnection", StringComparison.OrdinalIgnoreCase))
+        {
+            sqlServerOptions.EnableRetryOnFailure();
+        }
+    });
 });
 
 
