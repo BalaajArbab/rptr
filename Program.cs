@@ -113,7 +113,7 @@ builder.Services.AddOpenApi(options =>
             schema.Items = new OpenApiSchema
             {
                 Type = JsonSchemaType.String,
-                MaxLength = 9
+                MaxLength = 10
             };
         }
 

@@ -6,7 +6,7 @@ namespace rptr.Services.PlaylistSongs;
 public sealed class PlaylistSongService : IPlaylistSongService
 {
     private const int MaximumTagCount = 2;
-    private const int MaximumTagLength = 9;
+    private const int MaximumTagLength = 10;
 
     private readonly DataContext _dbContext;
     private readonly ILogger<PlaylistSongService> _logger;
