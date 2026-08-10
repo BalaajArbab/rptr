@@ -20,6 +20,8 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 const string FrontendCorsPolicy = "Frontend";
 
+builder.Logging.AddAzureWebAppDiagnostics();
+
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? [];
@@ -248,6 +250,10 @@ builder.Services.AddOpenApi(options =>
 
 
 var app = builder.Build();
+
+app.Logger.LogInformation(
+    "rptr API starting in the {EnvironmentName} environment.",
+    app.Environment.EnvironmentName);
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
