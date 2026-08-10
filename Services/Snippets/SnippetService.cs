@@ -5,7 +5,7 @@ namespace rptr.Services.Snippets;
 public sealed class SnippetService : ISnippetService
 {
     private const int MaximumNameLength = 26;
-    private const int MinimumSegmentLengthMs = 3000;
+    private const int MinimumSegmentLengthMs = 6000;
 
     private readonly DataContext _dbContext;
     private readonly ILogger<SnippetService> _logger;
@@ -242,7 +242,8 @@ public sealed class SnippetService : ISnippetService
 
                 if ((long)segment.EndMs - segment.StartMs < MinimumSegmentLengthMs)
                 {
-                    segmentErrors.Add("Each segment must be at least 3000 milliseconds long.");
+                    segmentErrors.Add(
+                        $"Each segment must be at least {MinimumSegmentLengthMs} milliseconds long.");
                 }
 
                 if (index > 0 && segment.StartMs < previousEndMs)
