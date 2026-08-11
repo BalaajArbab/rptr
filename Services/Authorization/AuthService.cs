@@ -27,6 +27,7 @@ public class AuthService : IAuthService
         "streaming",
         "user-read-private",
         "user-read-email",
+        "playlist-read-private",
         "user-read-playback-state",
         "user-modify-playback-state"
     ];
