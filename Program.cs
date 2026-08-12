@@ -6,11 +6,14 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using rptr.Data.Mongo;
 using rptr.Endpoints;
 using rptr.Services.Authorization;
+using rptr.Services.GuestSessions;
 using rptr.Services.Playlists;
 using rptr.Services.PlaylistSongs;
 using rptr.Services.Snippets;
@@ -57,6 +60,18 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddDataProtection();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
+builder.Services.Configure<MongoDbSettings>(
+    builder.Configuration.GetSection(MongoDbSettings.SectionName));
+builder.Services.AddOptions<GuestSessionSettings>()
+    .Bind(builder.Configuration.GetSection(GuestSessionSettings.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<MongoDbContext>();
+builder.Services.AddSingleton<IGuestSessionCounter, MongoGuestSessionCounter>();
+builder.Services.AddSingleton<IGuestLeaseStore, InMemoryGuestLeaseStore>();
+builder.Services.AddHealthChecks()
+    .AddCheck<MongoDbHealthCheck>("mongodb");
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaylistService, PlaylistService>();
 builder.Services.AddScoped<IPlaylistSongService, PlaylistSongService>();
@@ -282,6 +297,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapFeedbackEndpoints();
+app.MapHealthChecks("/health/mongodb");
 
 app.Run();
 
