@@ -28,7 +28,9 @@ public sealed record AuthSessionResponse(
     DateTime SpotifyAccessTokenExpiresAt,
     string SpotifyScopes,
     bool IsGuest,
-    AuthUserResponse User);
+    AuthUserResponse User,
+    string? GuestFeedbackToken = null,
+    DateTime? GuestFeedbackTokenExpiresAt = null);
 
 public sealed record SpotifyAccessTokenResponse(
     string SpotifyAccessToken,

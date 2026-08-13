@@ -12,6 +12,9 @@ public sealed class GuestSessionSettings
     [Range(5, 120)]
     public int MaximumDurationMinutes { get; init; } = 57;
 
+    [Range(1, 1440)]
+    public int FeedbackTokenGraceMinutes { get; init; } = 15;
+
     public string BaselinePath { get; init; } = "GuestData/guest-baseline.db";
 
     public string EntryCode { get; init; } = string.Empty;

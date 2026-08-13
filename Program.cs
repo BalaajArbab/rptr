@@ -60,16 +60,32 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    options.AddPolicy("GuestFeedback", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
     options.OnRejected = async (context, cancellationToken) =>
     {
+        var retryAfterSeconds = context.Lease.TryGetMetadata(
+            MetadataName.RetryAfter,
+            out var retryAfter)
+            ? Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))
+            : 60;
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/problem+json";
-        context.HttpContext.Response.Headers.RetryAfter = "300";
+        context.HttpContext.Response.Headers.RetryAfter =
+            retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await context.HttpContext.Response.WriteAsJsonAsync(
             new ProblemDetails
             {
                 Status = StatusCodes.Status429TooManyRequests,
-                Title = "Too many guest login attempts."
+                Title = "Too many requests."
             },
             cancellationToken);
     };
@@ -103,6 +119,7 @@ builder.Services.AddSingleton<IGuestLeaseStore, InMemoryGuestLeaseStore>();
 builder.Services.AddSingleton<GuestCredentialProtector>();
 builder.Services.AddSingleton<IGuestCredentialStore, MongoGuestCredentialStore>();
 builder.Services.AddSingleton<IGuestRuntimeStore, InMemoryGuestRuntimeStore>();
+builder.Services.AddSingleton<IGuestFeedbackTokenService, GuestFeedbackTokenService>();
 builder.Services.AddSingleton<IFeedbackStore, MongoFeedbackStore>();
 builder.Services.AddScoped<IGuestSpotifyTokenClient, GuestSpotifyTokenClient>();
 builder.Services.AddScoped<IGuestSessionService, GuestSessionService>();
@@ -171,7 +188,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 }
             }
         };
-    });
+    })
+    .AddJwtBearer(
+        GuestFeedbackTokenService.AuthenticationScheme,
+        options =>
+        {
+            options.MapInboundClaims = false;
+            options.TokenValidationParameters =
+                GuestFeedbackTokenService.CreateValidationParameters(
+                    builder.Configuration);
+        });
 
 builder.Services.AddOpenApi(options =>
 {
@@ -206,6 +232,11 @@ builder.Services.AddOpenApi(options =>
                 MaxLength = 10
             };
         }
+        else if (property?.DeclaringType == typeof(CreateFeedbackRequest)
+            && property.Name == "message")
+        {
+            schema.MaxLength = 2000;
+        }
 
         return Task.CompletedTask;
     });
@@ -213,9 +244,11 @@ builder.Services.AddOpenApi(options =>
     options.AddOperationTransformer((operation, context, cancellationToken) =>
     {
         var metadata = context.Description.ActionDescriptor.EndpointMetadata;
-        var endpointName = context.Description.ActionDescriptor.AttributeRouteInfo?.Name;
+        var endpointName = context.Description.ActionDescriptor.AttributeRouteInfo?.Name
+            ?? metadata.OfType<IEndpointNameMetadata>().FirstOrDefault()?.EndpointName;
 
-        var requiresAuthorization = metadata.OfType<IAuthorizeData>().Any();
+        var authorizationMetadata = metadata.OfType<IAuthorizeData>().ToArray();
+        var requiresAuthorization = authorizationMetadata.Length > 0;
         var allowsAnonymous = metadata.OfType<IAllowAnonymous>().Any();
 
         if (allowsAnonymous)
@@ -226,9 +259,17 @@ builder.Services.AddOpenApi(options =>
         {
             operation.Security ??= new List<OpenApiSecurityRequirement>();
 
+            var usesGuestFeedbackToken = endpointName == "CreateGuestFeedback"
+                || authorizationMetadata.Any(value =>
+                    value.AuthenticationSchemes?.Split(',', StringSplitOptions.TrimEntries)
+                        .Contains(GuestFeedbackTokenService.AuthenticationScheme) == true);
+            var securitySchemeName = usesGuestFeedbackToken
+                ? GuestFeedbackTokenService.AuthenticationScheme
+                : "BackendBearer";
+
             operation.Security.Add(new OpenApiSecurityRequirement
             {
-                [new OpenApiSecuritySchemeReference("BackendBearer", context.Document)] = []
+                [new OpenApiSecuritySchemeReference(securitySchemeName, context.Document)] = []
             });
         }
 
@@ -271,9 +312,12 @@ builder.Services.AddOpenApi(options =>
 
         if (operation.Responses is { } documentedResponses)
         {
-            if (endpointName == "CreateGuestSession")
+            if (endpointName is "CreateGuestSession" or "CreateGuestFeedback")
             {
-                foreach (var statusCode in new[] { "409", "429" })
+                var rateLimitedStatuses = endpointName == "CreateGuestSession"
+                    ? new[] { "409", "429" }
+                    : new[] { "429" };
+                foreach (var statusCode in rateLimitedStatuses)
                 {
                     if (documentedResponses.TryGetValue(statusCode, out var response))
                     {
@@ -282,7 +326,9 @@ builder.Services.AddOpenApi(options =>
                             : new Dictionary<string, IOpenApiHeader>(response.Headers);
                         headers["Retry-After"] = new OpenApiHeader
                         {
-                            Description = "Seconds before another guest-session attempt should be made.",
+                            Description = endpointName == "CreateGuestSession"
+                                ? "Seconds before another guest-session attempt should be made."
+                                : "Seconds before another guest-feedback submission should be made.",
                             Schema = new OpenApiSchema
                             {
                                 Type = JsonSchemaType.Integer,
@@ -401,21 +447,34 @@ internal sealed class BackendBearerSecuritySchemeTransformer(IAuthenticationSche
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
     {
         var authenticationSchemes = await authenticationSchemeProvider.GetAllSchemesAsync();
+        var securitySchemes = new Dictionary<string, IOpenApiSecurityScheme>();
         if (authenticationSchemes.Any(authScheme => authScheme.Name == "Bearer"))
         {
-            var securitySchemes = new Dictionary<string, IOpenApiSecurityScheme>
+            securitySchemes["BackendBearer"] = new OpenApiSecurityScheme
             {
-                ["BackendBearer"] = new OpenApiSecurityScheme
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                In = ParameterLocation.Header,
+                BearerFormat = "JWT",
+                Description = "Backend JWT returned by the session endpoint. Spotify access tokens are not accepted."
+            };
+        }
+
+        if (authenticationSchemes.Any(authScheme =>
+                authScheme.Name == GuestFeedbackTokenService.AuthenticationScheme))
+        {
+            securitySchemes[GuestFeedbackTokenService.AuthenticationScheme] =
+                new OpenApiSecurityScheme
                 {
                     Type = SecuritySchemeType.Http,
                     Scheme = "bearer",
                     In = ParameterLocation.Header,
                     BearerFormat = "JWT",
-                    Description = "Backend JWT returned by the session endpoint. Spotify access tokens are not accepted."
-                }
-            };
-            document.Components ??= new OpenApiComponents();
-            document.Components.SecuritySchemes = securitySchemes;
+                    Description = "Feedback-only token returned when a guest session starts. It is accepted only by the guest feedback endpoint."
+                };
         }
+
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes = securitySchemes;
     }
 }

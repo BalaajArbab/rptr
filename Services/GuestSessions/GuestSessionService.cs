@@ -15,6 +15,7 @@ public sealed class GuestSessionService : IGuestSessionService
     private readonly IGuestRuntimeStore _runtimeStore;
     private readonly IGuestCredentialStore _credentialStore;
     private readonly IGuestSpotifyTokenClient _spotifyTokenClient;
+    private readonly IGuestFeedbackTokenService _guestFeedbackTokenService;
     private readonly GuestSessionSettings _settings;
     private readonly IConfiguration _configuration;
     private readonly TimeProvider _timeProvider;
@@ -25,6 +26,7 @@ public sealed class GuestSessionService : IGuestSessionService
         IGuestRuntimeStore runtimeStore,
         IGuestCredentialStore credentialStore,
         IGuestSpotifyTokenClient spotifyTokenClient,
+        IGuestFeedbackTokenService guestFeedbackTokenService,
         IOptions<GuestSessionSettings> settings,
         IConfiguration configuration,
         TimeProvider timeProvider,
@@ -34,6 +36,7 @@ public sealed class GuestSessionService : IGuestSessionService
         _runtimeStore = runtimeStore;
         _credentialStore = credentialStore;
         _spotifyTokenClient = spotifyTokenClient;
+        _guestFeedbackTokenService = guestFeedbackTokenService;
         _settings = settings.Value;
         _configuration = configuration;
         _timeProvider = timeProvider;
@@ -241,6 +244,7 @@ public sealed class GuestSessionService : IGuestSessionService
     private AuthSessionResponse CreateSessionResponse(GuestSessionRuntime runtime)
     {
         var jwt = CreateJwt(runtime);
+        var feedbackToken = _guestFeedbackTokenService.Create(runtime.Lease);
         return new AuthSessionResponse(
             jwt.Token,
             jwt.ExpiresAt.UtcDateTime,
@@ -249,7 +253,9 @@ public sealed class GuestSessionService : IGuestSessionService
             runtime.SpotifyToken.ExpiresAt,
             runtime.SpotifyToken.Scopes,
             true,
-            runtime.User);
+            runtime.User,
+            feedbackToken.Token,
+            feedbackToken.ExpiresAt.UtcDateTime);
     }
 
     private (string Token, DateTimeOffset ExpiresAt) CreateJwt(

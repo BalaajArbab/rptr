@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using rptr.Services.GuestSessions;
 
 namespace rptr.Services.Authorization;
 
@@ -43,6 +44,23 @@ public static class ClaimsPrincipalExtensions
     {
         sessionNumber = 0;
         return principal.IsGuest()
+            && long.TryParse(
+                principal.FindFirstValue(GuestSessionNumberClaim),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out sessionNumber)
+            && sessionNumber > 0;
+    }
+
+    public static bool TryGetGuestFeedbackSessionNumber(
+        this ClaimsPrincipal principal,
+        out long sessionNumber)
+    {
+        sessionNumber = 0;
+        return string.Equals(
+                principal.FindFirstValue(SessionTypeClaim),
+                GuestFeedbackTokenService.SessionType,
+                StringComparison.Ordinal)
             && long.TryParse(
                 principal.FindFirstValue(GuestSessionNumberClaim),
                 NumberStyles.Integer,
