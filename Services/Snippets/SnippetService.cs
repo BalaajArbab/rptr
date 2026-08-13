@@ -4,7 +4,7 @@ namespace rptr.Services.Snippets;
 
 public sealed class SnippetService : ISnippetService
 {
-    private const int MaximumNameLength = 26;
+    private const int MaximumNameLength = 45;
     private const int MinimumSegmentLengthMs = 6000;
 
     private readonly DataContext _dbContext;
