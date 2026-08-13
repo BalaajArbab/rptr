@@ -22,15 +22,7 @@ namespace rptr.Services.Authorization;
 public class AuthService : IAuthService
 {
     private const string HandoffCacheKeyPrefix = "spotify-auth-handoff:";
-    private static readonly string[] SpotifyScopes =
-    [
-        "streaming",
-        "user-read-private",
-        "user-read-email",
-        "playlist-read-private",
-        "user-read-playback-state",
-        "user-modify-playback-state"
-    ];
+    private static readonly string[] SpotifyScopes = SpotifyScopeRequirements.Required;
 
     private readonly ILogger<AuthService> _logger;
     private readonly DataContext _dbContext;
@@ -185,6 +177,7 @@ public class AuthService : IAuthService
             user.SpotifyToken.AccessToken,
             user.SpotifyToken.ExpiresAt,
             user.SpotifyToken.Scope,
+            false,
             MapUser(user));
     }
 

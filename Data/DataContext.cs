@@ -23,6 +23,8 @@ public class DataContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var isSqlServer = Database.IsSqlServer();
+        var isSqlite = Database.IsSqlite();
         var encryptedStringConverter = new ValueConverter<string, string>(
             plainText => string.IsNullOrEmpty(plainText)
                 ? plainText
@@ -63,8 +65,13 @@ public class DataContext : DbContext
             playlist.HasIndex(p => p.SpotifyPlaylistId).IsUnique();
             playlist.Property(p => p.SpotifyPlaylistId)
                 .IsRequired()
-                .HasMaxLength(128)
-                .UseCollation("Latin1_General_100_BIN2");
+                .HasMaxLength(128);
+
+            if (isSqlServer)
+            {
+                playlist.Property(p => p.SpotifyPlaylistId)
+                    .UseCollation("Latin1_General_100_BIN2");
+            }
 
             playlist
                 .HasOne(p => p.OwnerUser)
@@ -85,12 +92,20 @@ public class DataContext : DbContext
             song.HasIndex(s => new { s.PlaylistId, s.SpotifySongId }).IsUnique();
             song.Property(s => s.SpotifySongId)
                 .IsRequired()
-                .HasMaxLength(128)
-                .UseCollation("Latin1_General_100_BIN2");
+                .HasMaxLength(128);
+
+            if (isSqlServer)
+            {
+                song.Property(s => s.SpotifySongId)
+                    .UseCollation("Latin1_General_100_BIN2");
+            }
             song.Property(s => s.SongName).IsRequired();
             song.Property(s => s.PrimaryArtistName).IsRequired();
             song.Property(s => s.Excluded).HasDefaultValue(false);
-            song.Property(s => s.Tags).HasColumnType("nvarchar(max)");
+            if (isSqlServer)
+            {
+                song.Property(s => s.Tags).HasColumnType("nvarchar(max)");
+            }
 
             song
                 .HasOne(s => s.Playlist)
@@ -100,7 +115,9 @@ public class DataContext : DbContext
 
             song.ToTable(table => table.HasCheckConstraint(
                 "CK_PlaylistSongs_OriginalSongLengthMs_Positive",
-                "[OriginalSongLengthMs] IS NULL OR [OriginalSongLengthMs] > 0"));
+                isSqlite
+                    ? "\"OriginalSongLengthMs\" IS NULL OR \"OriginalSongLengthMs\" > 0"
+                    : "[OriginalSongLengthMs] IS NULL OR [OriginalSongLengthMs] > 0"));
         });
 
         modelBuilder.Entity<Snippet>(snippet =>

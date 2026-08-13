@@ -3,17 +3,20 @@ global using  dotnetrpg_again.Data;
 global using rptr.Models;
 
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using rptr.Data.Mongo;
 using rptr.Endpoints;
 using rptr.Services.Authorization;
 using rptr.Services.GuestSessions;
+using rptr.Services.Feedback;
 using rptr.Services.Playlists;
 using rptr.Services.PlaylistSongs;
 using rptr.Services.Snippets;
@@ -45,6 +48,32 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod();
     });
 });
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("GuestLogin", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/problem+json";
+        context.HttpContext.Response.Headers.RetryAfter = "300";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new ProblemDetails
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Too many guest login attempts."
+            },
+            cancellationToken);
+    };
+});
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -68,14 +97,26 @@ builder.Services.AddOptions<GuestSessionSettings>()
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MongoDbContext>();
-builder.Services.AddSingleton<IGuestSessionCounter, MongoGuestSessionCounter>();
+builder.Services.AddSingleton<MongoGuestSessionCounter>();
+builder.Services.AddSingleton<IGuestSessionCounter, LazyGuestSessionCounter>();
 builder.Services.AddSingleton<IGuestLeaseStore, InMemoryGuestLeaseStore>();
+builder.Services.AddSingleton<GuestCredentialProtector>();
+builder.Services.AddSingleton<IGuestCredentialStore, MongoGuestCredentialStore>();
+builder.Services.AddSingleton<IGuestRuntimeStore, InMemoryGuestRuntimeStore>();
+builder.Services.AddSingleton<IFeedbackStore, MongoFeedbackStore>();
+builder.Services.AddScoped<IGuestSpotifyTokenClient, GuestSpotifyTokenClient>();
+builder.Services.AddScoped<IGuestSessionService, GuestSessionService>();
+builder.Services.AddHostedService<GuestSessionCleanupService>();
 builder.Services.AddHealthChecks()
     .AddCheck<MongoDbHealthCheck>("mongodb");
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IPlaylistService, PlaylistService>();
-builder.Services.AddScoped<IPlaylistSongService, PlaylistSongService>();
-builder.Services.AddScoped<ISnippetService, SnippetService>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IAuthService, AuthServiceRouter>();
+builder.Services.AddScoped<PlaylistService>();
+builder.Services.AddScoped<IPlaylistService, PlaylistServiceRouter>();
+builder.Services.AddScoped<PlaylistSongService>();
+builder.Services.AddScoped<IPlaylistSongService, PlaylistSongServiceRouter>();
+builder.Services.AddScoped<SnippetService>();
+builder.Services.AddScoped<ISnippetService, SnippetServiceRouter>();
 builder.Services.AddScoped<ISpotifyHttpClient, SpotifyHttpClient>();
 builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("SpotifySettings"));
 builder.Services.Configure<AuthRedirectSettings>(builder.Configuration.GetSection("AuthRedirects"));
@@ -87,6 +128,7 @@ var connectionString = builder.Configuration.GetConnectionString(connectionName)
 
 builder.Services.AddDbContext<DataContext>(options =>
 {
+    options.ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, ProviderModelCacheKeyFactory>();
     options.UseSqlServer(connectionString, sqlServerOptions =>
     {
         if (connectionName.Equals("AzureConnection", StringComparison.OrdinalIgnoreCase))
@@ -108,6 +150,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 builder.Configuration.GetSection("AppSettings:Token").Value!)),
             ValidateIssuer = false,
             ValidateAudience = false
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var principal = context.Principal;
+                if (principal?.IsGuest() != true)
+                {
+                    return;
+                }
+
+                var guestSessions = context.HttpContext.RequestServices
+                    .GetRequiredService<IGuestSessionService>();
+                if (!await guestSessions.ValidateAsync(
+                    principal,
+                    context.HttpContext.RequestAborted))
+                {
+                    context.Fail("The guest session is no longer active.");
+                }
+            }
         };
     });
 
@@ -209,6 +271,35 @@ builder.Services.AddOpenApi(options =>
 
         if (operation.Responses is { } documentedResponses)
         {
+            if (endpointName == "CreateGuestSession")
+            {
+                foreach (var statusCode in new[] { "409", "429" })
+                {
+                    if (documentedResponses.TryGetValue(statusCode, out var response))
+                    {
+                        var headers = response.Headers is null
+                            ? new Dictionary<string, IOpenApiHeader>()
+                            : new Dictionary<string, IOpenApiHeader>(response.Headers);
+                        headers["Retry-After"] = new OpenApiHeader
+                        {
+                            Description = "Seconds before another guest-session attempt should be made.",
+                            Schema = new OpenApiSchema
+                            {
+                                Type = JsonSchemaType.Integer,
+                                Format = "int32"
+                            }
+                        };
+
+                        documentedResponses[statusCode] = new OpenApiResponse
+                        {
+                            Description = response.Description,
+                            Content = response.Content,
+                            Headers = headers
+                        };
+                    }
+                }
+            }
+
             var responseDescriptions = endpointName switch
             {
                 "CreateAuthSession" => new Dictionary<string, string>
@@ -289,7 +380,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseRouting();
+
 app.UseCors(FrontendCorsPolicy);
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 

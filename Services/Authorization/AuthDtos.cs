@@ -18,6 +18,8 @@ public sealed record SpotifyCallbackResult(string RedirectUri);
 
 public sealed record AuthSessionRequest(string Code);
 
+public sealed record GuestSessionRequest(string EntryCode);
+
 public sealed record AuthSessionResponse(
     string BackendAccessToken,
     DateTime BackendAccessTokenExpiresAt,
@@ -25,6 +27,7 @@ public sealed record AuthSessionResponse(
     string SpotifyAccessToken,
     DateTime SpotifyAccessTokenExpiresAt,
     string SpotifyScopes,
+    bool IsGuest,
     AuthUserResponse User);
 
 public sealed record SpotifyAccessTokenResponse(

@@ -13,6 +13,9 @@ public interface IGuestLeaseStore
         Guid sessionKey,
         CancellationToken cancellationToken = default);
 
+    Task<GuestLease?> GetCurrentAsync(
+        CancellationToken cancellationToken = default);
+
     Task<bool> ReleaseAsync(
         Guid sessionKey,
         CancellationToken cancellationToken = default);

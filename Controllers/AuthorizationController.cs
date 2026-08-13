@@ -4,7 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using rptr.Services.Authorization;
+using rptr.Services.GuestSessions;
 
 namespace rptr.Controllers
 {
@@ -13,10 +15,14 @@ namespace rptr.Controllers
     public class AuthorizationController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly IGuestSessionService _guestSessionService;
 
-        public AuthorizationController(IAuthService authService)
+        public AuthorizationController(
+            IAuthService authService,
+            IGuestSessionService guestSessionService)
         {
             _authService = authService;
+            _guestSessionService = guestSessionService;
         }
 
         [AllowAnonymous]
@@ -103,6 +109,58 @@ namespace rptr.Controllers
             return Ok(session);
         }
 
+        [AllowAnonymous]
+        [EnableRateLimiting("GuestLogin")]
+        [HttpPost("guest-session", Name = "CreateGuestSession")]
+        [EndpointSummary("Start a guest demo session")]
+        [EndpointDescription(
+            "Acquires the single guest demo slot using its shared entry code and returns a short-lived backend JWT and Spotify access token.")]
+        [ProducesResponseType<AuthSessionResponse>(StatusCodes.Status200OK, "application/json")]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests, "application/problem+json")]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway, "application/problem+json")]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+        public async Task<ActionResult<AuthSessionResponse>> GuestSession(
+            [FromBody] GuestSessionRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await _guestSessionService.AcquireAsync(
+                request.EntryCode,
+                cancellationToken);
+            return MapGuestSessionResult(result);
+        }
+
+        [Authorize]
+        [HttpPost("guest-session/heartbeat", Name = "HeartbeatGuestSession")]
+        [EndpointSummary("Renew an active guest session")]
+        [EndpointDescription(
+            "Extends the guest session's five-minute idle lease up to its absolute limit and returns a replacement backend JWT.")]
+        [ProducesResponseType<GuestHeartbeatResponse>(StatusCodes.Status200OK, "application/json")]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
+        public async Task<ActionResult<GuestHeartbeatResponse>> GuestHeartbeat(
+            CancellationToken cancellationToken)
+        {
+            var heartbeat = await _guestSessionService.HeartbeatAsync(User, cancellationToken);
+            return heartbeat is null
+                ? Unauthorized()
+                : Ok(heartbeat);
+        }
+
+        [Authorize]
+        [HttpDelete("guest-session", Name = "DeleteGuestSession")]
+        [EndpointSummary("End an active guest session")]
+        [EndpointDescription("Releases the guest lease and discards all in-memory demo changes.")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
+        public async Task<IActionResult> DeleteGuestSession(
+            CancellationToken cancellationToken)
+        {
+            return await _guestSessionService.ReleaseAsync(User, cancellationToken)
+                ? NoContent()
+                : Unauthorized();
+        }
+
         [Authorize]
         [HttpPost("spotify-token", Name = "GetSpotifyAccessToken")]
         [EndpointSummary("Get a current Spotify access token")]
@@ -121,6 +179,36 @@ namespace rptr.Controllers
             }
 
             return Ok(token);
+        }
+
+        private ActionResult<AuthSessionResponse> MapGuestSessionResult(
+            GuestSessionResult result)
+        {
+            switch (result.Status)
+            {
+                case GuestSessionStatus.Success:
+                    return Ok(result.Session);
+                case GuestSessionStatus.InvalidEntryCode:
+                case GuestSessionStatus.Unauthorized:
+                    return Problem(
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        title: "Guest authentication failed.");
+                case GuestSessionStatus.Occupied:
+                    Response.Headers.RetryAfter =
+                        (result.RetryAfterSeconds ?? 1).ToString(
+                            System.Globalization.CultureInfo.InvariantCulture);
+                    return Problem(
+                        statusCode: StatusCodes.Status409Conflict,
+                        title: "The guest demo is currently in use.");
+                case GuestSessionStatus.SpotifyFailure:
+                    return Problem(
+                        statusCode: StatusCodes.Status502BadGateway,
+                        title: "Spotify could not initialize the guest session.");
+                default:
+                    return Problem(
+                        statusCode: StatusCodes.Status503ServiceUnavailable,
+                        title: "The guest demo is temporarily unavailable.");
+            }
         }
     }
 }

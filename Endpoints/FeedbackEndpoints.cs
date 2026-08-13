@@ -2,6 +2,7 @@ using System.Globalization;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using rptr.Services.Authorization;
+using rptr.Services.Feedback;
 
 namespace rptr.Endpoints;
 
@@ -16,7 +17,7 @@ public static class FeedbackEndpoints
             .WithName("CreateFeedback")
             .WithTags("Feedback")
             .WithSummary("Submit feedback")
-            .WithDescription("Stores a feedback message for the authenticated user.")
+            .WithDescription("Stores a feedback message for the authenticated normal or guest user.")
             .Accepts<CreateFeedbackRequest>("application/json")
             .Produces<CreateFeedbackResponse>(StatusCodes.Status201Created, "application/json")
             .ProducesValidationProblem(StatusCodes.Status400BadRequest, "application/problem+json")
@@ -29,7 +30,7 @@ public static class FeedbackEndpoints
         CreateFeedbackRequest request,
         ClaimsPrincipal principal,
         HttpContext httpContext,
-        DataContext db,
+        IFeedbackStore feedbackStore,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
@@ -66,23 +67,30 @@ public static class FeedbackEndpoints
             remoteIpAddress = remoteIpAddress.MapToIPv4();
         }
 
-        var feedback = new Feedback
+        FeedbackActor actor;
+        if (principal.TryGetGuestSessionNumber(out var guestSessionNumber))
         {
-            UserId = userId,
-            Message = message,
-            IpAddress = remoteIpAddress?.ToString(),
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+            actor = new FeedbackActor("guest", null, guestSessionNumber);
+        }
+        else
+        {
+            actor = new FeedbackActor("normal", userId, null);
+        }
 
-        db.Feedback.Add(feedback);
-        await db.SaveChangesAsync(cancellationToken);
+        var feedback = await feedbackStore.CreateAsync(
+            actor,
+            message,
+            remoteIpAddress?.ToString(),
+            cancellationToken);
 
         loggerFactory
             .CreateLogger("Feedback")
             .LogInformation(
-                "Feedback {FeedbackId} received from user {UserId}",
+                "Feedback {FeedbackId} received from {ActorType} actor {ActorId}",
                 feedback.Id,
-                userId);
+                actor.Type,
+                actor.GuestSessionNumber?.ToString(CultureInfo.InvariantCulture)
+                    ?? actor.NormalUserId?.ToString(CultureInfo.InvariantCulture));
 
         return Results.Json(
             new CreateFeedbackResponse(feedback.Id, feedback.CreatedAt),

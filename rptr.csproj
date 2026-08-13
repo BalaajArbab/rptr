@@ -16,9 +16,27 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.AzureAppServices" Version="10.0.9" />
     <PackageReference Include="MongoDB.Driver" Version="3.10.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.12.46" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="GuestData\guest-baseline.db" Condition="Exists('GuestData\guest-baseline.db')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Compile Remove="Tools\**\*.cs" />
+    <Content Remove="Tools\**\*" />
+    <None Remove="Tools\**\*" />
+  </ItemGroup>
+
+  <Target Name="RequireGuestBaselineForPublish" BeforeTargets="Publish">
+    <Error
+      Condition="!Exists('GuestData\guest-baseline.db')"
+      Text="GuestData\guest-baseline.db is missing. Run the GuestAdmin export-baseline command before publishing." />
+  </Target>
 
 </Project>

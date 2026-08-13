@@ -116,6 +116,21 @@ public sealed class InMemoryGuestLeaseStore : IGuestLeaseStore, IDisposable
         }
     }
 
+    public async Task<GuestLease?> GetCurrentAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var now = _timeProvider.GetUtcNow();
+            return IsActive(_activeLease, now) ? _activeLease : null;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<bool> ReleaseAsync(
         Guid sessionKey,
         CancellationToken cancellationToken = default)
