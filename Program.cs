@@ -419,7 +419,8 @@ builder.Services.AddOpenApi(options =>
                 or "CreateGuestFeedback"
                 or "RecordActivity"
                 or "RecordGuestSessionEnded"
-                or "RecordFrontPageView")
+                or "RecordFrontPageView"
+                or "RecordGuestSessionCheck")
             {
                 var rateLimitedStatuses = endpointName == "CreateGuestSession"
                     ? new[] { "409", "429" }

@@ -409,3 +409,10 @@ public sealed class GuestSessionEndedActivityEventRequest
         "unknown")]
     public required string EndReason { get; init; }
 }
+
+public sealed class GuestSessionCheckActivityEventRequest
+{
+    [Required]
+    [AllowedValues("vacant", "occupied")]
+    public required string Availability { get; init; }
+}

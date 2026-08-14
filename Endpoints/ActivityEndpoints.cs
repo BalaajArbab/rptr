@@ -85,6 +85,23 @@ public static class ActivityEndpoints
                 StatusCodes.Status429TooManyRequests,
                 "application/problem+json");
 
+        endpoints.MapPost("/api/hello/guest", RecordGuestSessionCheck)
+            .AllowAnonymous()
+            .RequireRateLimiting("PageView")
+            .WithName("RecordGuestSessionCheck")
+            .WithTags("Activity")
+            .WithSummary("Record a guest-session availability check")
+            .WithDescription(
+                "Records whether the frontend displayed the guest session as vacant or occupied when the guest-session button was selected.")
+            .Accepts<GuestSessionCheckActivityEventRequest>("application/json")
+            .Produces(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem(
+                StatusCodes.Status400BadRequest,
+                "application/problem+json")
+            .ProducesProblem(
+                StatusCodes.Status429TooManyRequests,
+                "application/problem+json");
+
         return endpoints;
     }
 
@@ -223,6 +240,29 @@ public static class ActivityEndpoints
         return Results.Accepted();
     }
 
+    private static IResult RecordGuestSessionCheck(
+        GuestSessionCheckActivityEventRequest request,
+        HttpContext httpContext,
+        IActivityEventSink eventSink)
+    {
+        var requestErrors = ValidateObject(request);
+        if (requestErrors.Count > 0)
+        {
+            return Results.ValidationProblem(requestErrors);
+        }
+
+        eventSink.Track(
+            "guest_session_check",
+            new GuestSessionCheckActivityEvent(
+                request.Availability,
+                GetDeviceType(httpContext.Request),
+                GetPlatform(httpContext.Request)),
+            new ActivityActor("anonymous", null, null),
+            GetRemoteIpAddress(httpContext));
+
+        return Results.Accepted();
+    }
+
     private static JsonSerializerOptions CreateEventJsonOptions()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
@@ -343,6 +383,11 @@ public static class ActivityEndpoints
         int SessionDurationSeconds);
 
     private sealed record FrontPageViewedActivityEvent(
+        string DeviceType,
+        string Platform);
+
+    private sealed record GuestSessionCheckActivityEvent(
+        string Availability,
         string DeviceType,
         string Platform);
 }
