@@ -108,6 +108,16 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    options.AddPolicy("KeepWarm", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
     options.OnRejected = async (context, cancellationToken) =>
     {
         var retryAfterSeconds = context.Lease.TryGetMetadata(
@@ -151,6 +161,7 @@ builder.Services.AddOptions<GuestSessionSettings>()
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MongoDbContext>();
+builder.Services.AddSingleton<MongoKeepWarmService>();
 builder.Services.AddSingleton<MongoGuestSessionCounter>();
 builder.Services.AddSingleton<IGuestSessionCounter, LazyGuestSessionCounter>();
 builder.Services.AddSingleton<IGuestLeaseStore, InMemoryGuestLeaseStore>();
@@ -420,7 +431,8 @@ builder.Services.AddOpenApi(options =>
                 or "RecordActivity"
                 or "RecordGuestSessionEnded"
                 or "RecordFrontPageView"
-                or "RecordGuestSessionCheck")
+                or "RecordGuestSessionCheck"
+                or "TouchMongo")
             {
                 var rateLimitedStatuses = endpointName == "CreateGuestSession"
                     ? new[] { "409", "429" }
@@ -438,6 +450,8 @@ builder.Services.AddOpenApi(options =>
                                 ? "Seconds before another guest-session attempt should be made."
                                 : endpointName == "CreateGuestFeedback"
                                     ? "Seconds before another guest-feedback submission should be made."
+                                    : endpointName == "TouchMongo"
+                                        ? "Seconds before another keep-warm request should be made."
                                     : "Seconds before another activity event should be submitted.",
                             Schema = new OpenApiSchema
                             {
@@ -549,6 +563,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapFeedbackEndpoints();
 app.MapActivityEndpoints();
+app.MapKeepWarmEndpoints();
 app.MapHealthChecks("/health/mongodb");
 
 app.Run();
