@@ -3,6 +3,7 @@ global using  dotnetrpg_again.Data;
 global using rptr.Models;
 
 using System.ComponentModel.DataAnnotations;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -22,6 +23,7 @@ using rptr.Services.Activity;
 using rptr.Services.Authorization;
 using rptr.Services.GuestSessions;
 using rptr.Services.Feedback;
+using rptr.Services.KeepWarm;
 using rptr.Services.Playlists;
 using rptr.Services.PlaylistSongs;
 using rptr.Services.Snippets;
@@ -152,12 +154,31 @@ builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDataProtection();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(
+    GitHubWorkflowDispatchService.HttpClientName,
+    client =>
+    {
+        client.BaseAddress = new Uri("https://api.github.com/");
+        client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("rptr-api/1.0");
+        client.DefaultRequestHeaders.Add(
+            "X-GitHub-Api-Version",
+            "2026-03-10");
+    });
 builder.Services.AddMemoryCache();
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection(MongoDbSettings.SectionName));
 builder.Services.AddOptions<GuestSessionSettings>()
     .Bind(builder.Configuration.GetSection(GuestSessionSettings.SectionName))
     .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<KeepWarmDispatchSettings>()
+    .Bind(builder.Configuration.GetSection(KeepWarmDispatchSettings.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(
+        settings => !settings.Enabled || !string.IsNullOrWhiteSpace(settings.Token),
+        "KeepWarmDispatch:Token is required when keep-warm dispatch is enabled.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MongoDbContext>();
@@ -174,6 +195,7 @@ builder.Services.AddSingleton<IActivityEventSink, ApplicationInsightsActivityEve
 builder.Services.AddScoped<IGuestSpotifyTokenClient, GuestSpotifyTokenClient>();
 builder.Services.AddScoped<IGuestSessionService, GuestSessionService>();
 builder.Services.AddHostedService<GuestSessionCleanupService>();
+builder.Services.AddHostedService<GitHubWorkflowDispatchService>();
 builder.Services.AddHealthChecks()
     .AddCheck<MongoDbHealthCheck>("mongodb");
 builder.Services.AddScoped<AuthService>();
