@@ -2,6 +2,8 @@ global using Microsoft.EntityFrameworkCore;
 global using  dotnetrpg_again.Data;
 global using rptr.Models;
 
+using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
@@ -280,6 +282,16 @@ builder.Services.AddOpenApi(options =>
     {
         var property = context.JsonPropertyInfo;
 
+        if (property?.AttributeProvider is MemberInfo memberInfo
+            && memberInfo.GetCustomAttribute<AllowedValuesAttribute>() is { } allowedValues)
+        {
+            schema.Enum =
+            [
+                .. allowedValues.Values.Select(value =>
+                    value?.ToString() ?? string.Empty)
+            ];
+        }
+
         if (property?.DeclaringType == typeof(AuthSessionRequest)
             && property.Name == "code")
         {
@@ -339,7 +351,8 @@ builder.Services.AddOpenApi(options =>
         {
             operation.Security ??= new List<OpenApiSecurityRequirement>();
 
-            var usesGuestFeedbackToken = endpointName == "CreateGuestFeedback"
+            var usesGuestFeedbackToken = endpointName is
+                    "CreateGuestFeedback" or "RecordGuestSessionEnded"
                 || authorizationMetadata.Any(value =>
                     value.AuthenticationSchemes?.Split(',', StringSplitOptions.TrimEntries)
                         .Contains(GuestFeedbackTokenService.AuthenticationScheme) == true);
@@ -392,7 +405,10 @@ builder.Services.AddOpenApi(options =>
 
         if (operation.Responses is { } documentedResponses)
         {
-            if (endpointName is "CreateGuestSession" or "CreateGuestFeedback" or "RecordActivity")
+            if (endpointName is "CreateGuestSession"
+                or "CreateGuestFeedback"
+                or "RecordActivity"
+                or "RecordGuestSessionEnded")
             {
                 var rateLimitedStatuses = endpointName == "CreateGuestSession"
                     ? new[] { "409", "429" }
@@ -553,7 +569,7 @@ internal sealed class BackendBearerSecuritySchemeTransformer(IAuthenticationSche
                     Scheme = "bearer",
                     In = ParameterLocation.Header,
                     BearerFormat = "JWT",
-                    Description = "Feedback-only token returned when a guest session starts. It is accepted only by the guest feedback endpoint."
+                    Description = "Restricted token returned when a guest session starts. It is accepted only by the guest feedback and guest-session-ended endpoints."
                 };
         }
 

@@ -68,4 +68,37 @@ public static class ClaimsPrincipalExtensions
                 out sessionNumber)
             && sessionNumber > 0;
     }
+
+    public static bool TryGetGuestFeedbackIssuedAt(
+        this ClaimsPrincipal principal,
+        out DateTimeOffset issuedAt)
+    {
+        issuedAt = default;
+        return string.Equals(
+                principal.FindFirstValue(SessionTypeClaim),
+                GuestFeedbackTokenService.SessionType,
+                StringComparison.Ordinal)
+            && long.TryParse(
+                principal.FindFirstValue(JwtRegisteredClaimNames.Nbf),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var notBeforeSeconds)
+            && TryFromUnixTimeSeconds(notBeforeSeconds, out issuedAt);
+    }
+
+    private static bool TryFromUnixTimeSeconds(
+        long seconds,
+        out DateTimeOffset value)
+    {
+        try
+        {
+            value = DateTimeOffset.FromUnixTimeSeconds(seconds);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            value = default;
+            return false;
+        }
+    }
 }

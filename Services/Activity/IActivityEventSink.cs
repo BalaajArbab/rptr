@@ -11,4 +11,10 @@ public interface IActivityEventSink
         ActivityEventRequest activityEvent,
         ActivityActor actor,
         string? clientIpAddress);
+
+    void Track(
+        string eventName,
+        object activityEvent,
+        ActivityActor actor,
+        string? clientIpAddress);
 }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using rptr.Services.Activity;
 using rptr.Services.Authorization;
+using rptr.Services.GuestSessions;
 
 namespace rptr.Endpoints;
 
@@ -26,6 +27,40 @@ public static class ActivityEndpoints
                 "Accepts Base64-encoded UTF-8 JSON containing a supported client activity event. " +
                 "Actor identity, server time, and client IP are derived by the backend.")
             .Accepts<EncodedActivityRequest>("application/json")
+            .Produces(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem(
+                StatusCodes.Status400BadRequest,
+                "application/problem+json")
+            .ProducesProblem(
+                StatusCodes.Status401Unauthorized,
+                "application/problem+json")
+            .ProducesProblem(
+                StatusCodes.Status403Forbidden,
+                "application/problem+json")
+            .ProducesProblem(
+                StatusCodes.Status429TooManyRequests,
+                "application/problem+json");
+
+        endpoints.MapPost(
+                "/api/feedback/guest/session-ended",
+                RecordGuestSessionEnded)
+            .RequireAuthorization(policy =>
+            {
+                policy.AuthenticationSchemes.Add(
+                    GuestFeedbackTokenService.AuthenticationScheme);
+                policy.RequireAuthenticatedUser();
+                policy.RequireClaim(
+                    ClaimsPrincipalExtensions.SessionTypeClaim,
+                    GuestFeedbackTokenService.SessionType);
+            })
+            .RequireRateLimiting("Activity")
+            .WithName("RecordGuestSessionEnded")
+            .WithTags("Activity")
+            .WithSummary("Record the end of a guest session")
+            .WithDescription(
+                "Records a guest-session ending using the restricted token returned when the guest session began. " +
+                "The session identity and duration are derived by the backend.")
+            .Accepts<GuestSessionEndedActivityEventRequest>("application/json")
             .Produces(StatusCodes.Status202Accepted)
             .ProducesValidationProblem(
                 StatusCodes.Status400BadRequest,
@@ -83,7 +118,8 @@ public static class ActivityEndpoints
                 decodedPayload,
                 EventJsonOptions);
         }
-        catch (JsonException)
+        catch (Exception exception)
+            when (exception is JsonException or NotSupportedException)
         {
             return InvalidPayload(
                 "The decoded payload is not a supported activity event.");
@@ -100,7 +136,16 @@ public static class ActivityEndpoints
             return Results.ValidationProblem(eventErrors);
         }
 
-        var actor = principal.TryGetGuestSessionNumber(out var guestSessionNumber)
+        var isGuest = principal.TryGetGuestSessionNumber(out var guestSessionNumber);
+        if (activityEvent is GuestSessionStartedActivityEventRequest && !isGuest)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Guest authentication required",
+                detail: "Only a guest session can record a guest-session-started event.");
+        }
+
+        var actor = isGuest
             ? new ActivityActor("guest", null, guestSessionNumber)
             : new ActivityActor("normal", userId, null);
 
@@ -112,10 +157,49 @@ public static class ActivityEndpoints
         return Results.Accepted();
     }
 
+    private static IResult RecordGuestSessionEnded(
+        GuestSessionEndedActivityEventRequest request,
+        ClaimsPrincipal principal,
+        HttpContext httpContext,
+        IActivityEventSink eventSink,
+        TimeProvider timeProvider)
+    {
+        if (!principal.TryGetGuestFeedbackSessionNumber(out var sessionNumber)
+            || !principal.TryGetGuestFeedbackIssuedAt(out var issuedAt))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                title: "Guest session event authentication failed.");
+        }
+
+        var requestErrors = ValidateObject(request);
+        if (requestErrors.Count > 0)
+        {
+            return Results.ValidationProblem(requestErrors);
+        }
+
+        var duration = timeProvider.GetUtcNow() - issuedAt;
+        var durationSeconds = (int)Math.Clamp(
+            Math.Floor(duration.TotalSeconds),
+            0,
+            int.MaxValue);
+
+        eventSink.Track(
+            GuestSessionEndedActivityEventRequest.EventType,
+            new GuestSessionEndedActivityEvent(
+                request.EndReason,
+                durationSeconds),
+            new ActivityActor("guest", null, sessionNumber),
+            GetRemoteIpAddress(httpContext));
+
+        return Results.Accepted();
+    }
+
     private static JsonSerializerOptions CreateEventJsonOptions()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
+            AllowOutOfOrderMetadataProperties = true,
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
         };
         options.Converters.Add(new TrimStringJsonConverter());
@@ -163,4 +247,8 @@ public static class ActivityEndpoints
 
         return remoteIpAddress?.ToString();
     }
+
+    private sealed record GuestSessionEndedActivityEvent(
+        string EndReason,
+        int SessionDurationSeconds);
 }

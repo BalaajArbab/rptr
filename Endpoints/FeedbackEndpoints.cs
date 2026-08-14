@@ -40,8 +40,8 @@ public static class FeedbackEndpoints
             .WithTags("Feedback")
             .WithSummary("Submit feedback after a guest session")
             .WithDescription(
-                "Stores feedback using the feedback-only bearer token returned when the guest session began. " +
-                "The token remains valid briefly after the guest session's absolute expiry and cannot authorize other API operations.")
+                "Stores feedback using the restricted bearer token returned when the guest session began. " +
+                "The token remains valid briefly after the guest session's absolute expiry and can authorize only guest feedback and guest-session-ended reporting.")
             .Accepts<CreateFeedbackRequest>("application/json")
             .Produces<CreateFeedbackResponse>(StatusCodes.Status201Created, "application/json")
             .ProducesValidationProblem(StatusCodes.Status400BadRequest, "application/problem+json")
