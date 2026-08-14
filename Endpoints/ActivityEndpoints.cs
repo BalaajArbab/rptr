@@ -72,6 +72,19 @@ public static class ActivityEndpoints
                 StatusCodes.Status429TooManyRequests,
                 "application/problem+json");
 
+        endpoints.MapPost("/api/hello", RecordFrontPageView)
+            .AllowAnonymous()
+            .RequireRateLimiting("PageView")
+            .WithName("RecordFrontPageView")
+            .WithTags("Activity")
+            .WithSummary("Record a front-page view")
+            .WithDescription(
+                "Records an anonymous front-page view. Device type and client IP are derived by the backend.")
+            .Produces(StatusCodes.Status202Accepted)
+            .ProducesProblem(
+                StatusCodes.Status429TooManyRequests,
+                "application/problem+json");
+
         return endpoints;
     }
 
@@ -195,6 +208,21 @@ public static class ActivityEndpoints
         return Results.Accepted();
     }
 
+    private static IResult RecordFrontPageView(
+        HttpContext httpContext,
+        IActivityEventSink eventSink)
+    {
+        eventSink.Track(
+            "front_page_viewed",
+            new FrontPageViewedActivityEvent(
+                GetDeviceType(httpContext.Request),
+                GetPlatform(httpContext.Request)),
+            new ActivityActor("anonymous", null, null),
+            GetRemoteIpAddress(httpContext));
+
+        return Results.Accepted();
+    }
+
     private static JsonSerializerOptions CreateEventJsonOptions()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
@@ -248,7 +276,73 @@ public static class ActivityEndpoints
         return remoteIpAddress?.ToString();
     }
 
+    private static string GetDeviceType(HttpRequest request)
+    {
+        if (string.Equals(
+                request.Headers["Sec-CH-UA-Mobile"].ToString(),
+                "?1",
+                StringComparison.Ordinal))
+        {
+            return "phone";
+        }
+
+        var userAgent = request.Headers.UserAgent.ToString();
+        return userAgent.Contains("Mobile", StringComparison.OrdinalIgnoreCase)
+            || userAgent.Contains("iPhone", StringComparison.OrdinalIgnoreCase)
+            || userAgent.Contains("Windows Phone", StringComparison.OrdinalIgnoreCase)
+            ? "phone"
+            : "desktop";
+    }
+
+    private static string GetPlatform(HttpRequest request)
+    {
+        var platformHint = request.Headers["Sec-CH-UA-Platform"]
+            .ToString()
+            .Trim()
+            .Trim('"');
+        if (!string.IsNullOrWhiteSpace(platformHint))
+        {
+            return platformHint;
+        }
+
+        var userAgent = request.Headers.UserAgent.ToString();
+        if (userAgent.Contains("Android", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Android";
+        }
+
+        if (userAgent.Contains("iPhone", StringComparison.OrdinalIgnoreCase)
+            || userAgent.Contains("iPad", StringComparison.OrdinalIgnoreCase))
+        {
+            return "iOS";
+        }
+
+        if (userAgent.Contains("Windows", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Windows";
+        }
+
+        if (userAgent.Contains("CrOS", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Chrome OS";
+        }
+
+        if (userAgent.Contains("Mac OS", StringComparison.OrdinalIgnoreCase)
+            || userAgent.Contains("Macintosh", StringComparison.OrdinalIgnoreCase))
+        {
+            return "macOS";
+        }
+
+        return userAgent.Contains("Linux", StringComparison.OrdinalIgnoreCase)
+            ? "Linux"
+            : "Unknown";
+    }
+
     private sealed record GuestSessionEndedActivityEvent(
         string EndReason,
         int SessionDurationSeconds);
+
+    private sealed record FrontPageViewedActivityEvent(
+        string DeviceType,
+        string Platform);
 }

@@ -98,6 +98,16 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+    options.AddPolicy("PageView", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
     options.OnRejected = async (context, cancellationToken) =>
     {
         var retryAfterSeconds = context.Lease.TryGetMetadata(
@@ -408,7 +418,8 @@ builder.Services.AddOpenApi(options =>
             if (endpointName is "CreateGuestSession"
                 or "CreateGuestFeedback"
                 or "RecordActivity"
-                or "RecordGuestSessionEnded")
+                or "RecordGuestSessionEnded"
+                or "RecordFrontPageView")
             {
                 var rateLimitedStatuses = endpointName == "CreateGuestSession"
                     ? new[] { "409", "429" }
