@@ -4,6 +4,7 @@ global using rptr.Models;
 
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -12,8 +13,10 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using OpenTelemetry.Logs;
 using rptr.Data.Mongo;
 using rptr.Endpoints;
+using rptr.Services.Activity;
 using rptr.Services.Authorization;
 using rptr.Services.GuestSessions;
 using rptr.Services.Feedback;
@@ -27,6 +30,19 @@ var builder = WebApplication.CreateBuilder(args);
 const string FrontendCorsPolicy = "Frontend";
 
 builder.Logging.AddAzureWebAppDiagnostics();
+
+var applicationInsightsConnectionString =
+    builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+    ?? builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrWhiteSpace(applicationInsightsConnectionString))
+{
+    builder.Services.Configure<OpenTelemetryLoggerOptions>(options =>
+        options.IncludeScopes = true);
+    builder.Services
+        .AddOpenTelemetry()
+        .UseAzureMonitor(options =>
+            options.ConnectionString = applicationInsightsConnectionString);
+}
 
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
@@ -67,6 +83,16 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 3,
                 Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("Activity", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
@@ -121,6 +147,7 @@ builder.Services.AddSingleton<IGuestCredentialStore, MongoGuestCredentialStore>(
 builder.Services.AddSingleton<IGuestRuntimeStore, InMemoryGuestRuntimeStore>();
 builder.Services.AddSingleton<IGuestFeedbackTokenService, GuestFeedbackTokenService>();
 builder.Services.AddSingleton<IFeedbackStore, MongoFeedbackStore>();
+builder.Services.AddSingleton<IActivityEventSink, ApplicationInsightsActivityEventSink>();
 builder.Services.AddScoped<IGuestSpotifyTokenClient, GuestSpotifyTokenClient>();
 builder.Services.AddScoped<IGuestSessionService, GuestSessionService>();
 builder.Services.AddHostedService<GuestSessionCleanupService>();
@@ -202,6 +229,52 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer<BackendBearerSecuritySchemeTransformer>();
+    options.AddDocumentTransformer(async (document, context, cancellationToken) =>
+    {
+        document.Components ??= new OpenApiComponents();
+        document.Components.Schemas ??=
+            new Dictionary<string, IOpenApiSchema>();
+
+        var eventSchemaReferences = new List<IOpenApiSchema>();
+        var discriminatorMapping =
+            new Dictionary<string, OpenApiSchemaReference>(StringComparer.Ordinal);
+
+        foreach (var eventType in ActivityEventMetadata.EventTypes)
+        {
+            var schema = await context.GetOrCreateSchemaAsync(
+                eventType.RequestType,
+                parameterDescription: null,
+                cancellationToken);
+            schema.Properties ??= new Dictionary<string, IOpenApiSchema>();
+            schema.Properties["type"] = new OpenApiSchema
+            {
+                Type = JsonSchemaType.String,
+                Enum = [eventType.Discriminator]
+            };
+            schema.Required ??= new HashSet<string>();
+            schema.Required.Add("type");
+
+            var componentName = eventType.RequestType.Name;
+            document.Components.Schemas[componentName] = schema;
+
+            var schemaReference = new OpenApiSchemaReference(
+                componentName,
+                document);
+            eventSchemaReferences.Add(schemaReference);
+            discriminatorMapping[eventType.Discriminator] = schemaReference;
+        }
+
+        document.Components.Schemas[nameof(ActivityEventRequest)] =
+            new OpenApiSchema
+            {
+                OneOf = eventSchemaReferences,
+                Discriminator = new OpenApiDiscriminator
+                {
+                    PropertyName = "type",
+                    Mapping = discriminatorMapping
+                }
+            };
+    });
 
     options.AddSchemaTransformer((schema, context, cancellationToken) =>
     {
@@ -236,6 +309,13 @@ builder.Services.AddOpenApi(options =>
             && property.Name == "message")
         {
             schema.MaxLength = 2000;
+        }
+        else if (property?.DeclaringType == typeof(EncodedActivityRequest)
+            && property.Name == "payload")
+        {
+            schema.Format = "byte";
+            schema.MinLength = 4;
+            schema.MaxLength = EncodedActivityRequest.MaximumPayloadLength;
         }
 
         return Task.CompletedTask;
@@ -312,7 +392,7 @@ builder.Services.AddOpenApi(options =>
 
         if (operation.Responses is { } documentedResponses)
         {
-            if (endpointName is "CreateGuestSession" or "CreateGuestFeedback")
+            if (endpointName is "CreateGuestSession" or "CreateGuestFeedback" or "RecordActivity")
             {
                 var rateLimitedStatuses = endpointName == "CreateGuestSession"
                     ? new[] { "409", "429" }
@@ -328,7 +408,9 @@ builder.Services.AddOpenApi(options =>
                         {
                             Description = endpointName == "CreateGuestSession"
                                 ? "Seconds before another guest-session attempt should be made."
-                                : "Seconds before another guest-feedback submission should be made.",
+                                : endpointName == "CreateGuestFeedback"
+                                    ? "Seconds before another guest-feedback submission should be made."
+                                    : "Seconds before another activity event should be submitted.",
                             Schema = new OpenApiSchema
                             {
                                 Type = JsonSchemaType.Integer,
@@ -438,6 +520,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapFeedbackEndpoints();
+app.MapActivityEndpoints();
 app.MapHealthChecks("/health/mongodb");
 
 app.Run();
