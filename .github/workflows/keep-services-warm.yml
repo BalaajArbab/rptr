@@ -1,8 +1,6 @@
 name: Keep services warm
 
 on:
-  schedule:
-    - cron: "7/15 * * * *"
   workflow_dispatch:
 
 permissions: {}
