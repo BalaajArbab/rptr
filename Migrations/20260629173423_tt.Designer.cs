@@ -13,7 +13,9 @@ namespace rptr.Migrations
 {
     [DbContext(typeof(DataContext))]
     [Migration("20260629173423_tt")]
+#pragma warning disable CS8981 // Migration name is retained because its identifier may already be applied.
     partial class tt
+#pragma warning restore CS8981
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
