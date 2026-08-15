@@ -43,7 +43,7 @@ public sealed class ApplicationInsightsActivityEventSink(
 
         using var scope = logger.BeginScope(properties);
         logger.LogInformation(
-            "{microsoft.custom_event.name} {client.address}",
+            "{microsoft.custom_event.name} {microsoft.client.ip}",
             eventName,
             clientIpAddress);
     }
