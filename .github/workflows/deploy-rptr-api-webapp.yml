@@ -10,8 +10,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  unit-tests:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Run unit tests
+        run: dotnet test tests/rptr.UnitTests/rptr.UnitTests.csproj --configuration Release --filter "Category=Unit"
+
   build:
     runs-on: windows-latest
+    needs: unit-tests
     permissions:
       contents: read #This is required for actions/checkout
 

@@ -32,6 +32,9 @@
     <Compile Remove="Tools\**\*.cs" />
     <Content Remove="Tools\**\*" />
     <None Remove="Tools\**\*" />
+    <Compile Remove="tests\**\*.cs" />
+    <Content Remove="tests\**\*" />
+    <None Remove="tests\**\*" />
   </ItemGroup>
 
   <Target Name="RequireGuestBaselineForPublish" BeforeTargets="Publish">
