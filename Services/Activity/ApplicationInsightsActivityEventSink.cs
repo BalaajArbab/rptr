@@ -32,8 +32,7 @@ public sealed class ApplicationInsightsActivityEventSink(
         {
             ["ActorType"] = actor.Type,
             ["UserId"] = actor.UserId,
-            ["GuestSessionNumber"] = actor.GuestSessionNumber,
-            ["client.address"] = clientIpAddress
+            ["GuestSessionNumber"] = actor.GuestSessionNumber
         };
 
         foreach (var property in GetEventProperties(eventType))
@@ -44,8 +43,9 @@ public sealed class ApplicationInsightsActivityEventSink(
 
         using var scope = logger.BeginScope(properties);
         logger.LogInformation(
-            "{microsoft.custom_event.name}",
-            eventName);
+            "{microsoft.custom_event.name} {client.address}",
+            eventName,
+            clientIpAddress);
     }
 
     private static PropertyInfo[] GetEventProperties(Type eventType) =>
