@@ -202,13 +202,14 @@ builder.Services.AddScoped<ISpotifyHttpClient, SpotifyHttpClient>();
 builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("SpotifySettings"));
 builder.Services.Configure<AuthRedirectSettings>(builder.Configuration.GetSection("AuthRedirects"));
 
-var connectionName = builder.Configuration["Database:ConnectionName"] ?? "AzureConnection";
-var connectionString = builder.Configuration.GetConnectionString(connectionName)
-    ?? throw new InvalidOperationException(
-        $"Connection string '{connectionName}' is not configured.");
-
-builder.Services.AddDbContext<DataContext>(options =>
+builder.Services.AddDbContext<DataContext>((serviceProvider, options) =>
 {
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var connectionName = configuration["Database:ConnectionName"] ?? "AzureConnection";
+    var connectionString = configuration.GetConnectionString(connectionName)
+        ?? throw new InvalidOperationException(
+            $"Connection string '{connectionName}' is not configured.");
+
     options.ReplaceService<Microsoft.EntityFrameworkCore.Infrastructure.IModelCacheKeyFactory, ProviderModelCacheKeyFactory>();
     options.UseSqlServer(connectionString, sqlServerOptions =>
     {
