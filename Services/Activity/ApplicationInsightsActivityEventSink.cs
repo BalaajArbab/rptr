@@ -32,7 +32,8 @@ public sealed class ApplicationInsightsActivityEventSink(
         {
             ["ActorType"] = actor.Type,
             ["UserId"] = actor.UserId,
-            ["GuestSessionNumber"] = actor.GuestSessionNumber
+            ["GuestSessionNumber"] = actor.GuestSessionNumber,
+            ["ClientIpAddress"] = clientIpAddress
         };
 
         foreach (var property in GetEventProperties(eventType))
