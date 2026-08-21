@@ -590,6 +590,8 @@ app.MapHealthChecks("/health/mongodb");
 
 app.Run();
 
+public partial class Program;
+
 internal sealed class BackendBearerSecuritySchemeTransformer(IAuthenticationSchemeProvider authenticationSchemeProvider) : IOpenApiDocumentTransformer
 {
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
