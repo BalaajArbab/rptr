@@ -416,3 +416,137 @@ public sealed class GuestSessionCheckActivityEventRequest
     [AllowedValues("vacant", "occupied")]
     public required string Availability { get; init; }
 }
+
+public sealed class DemoVideoInteractionActivityEventRequest : IValidatableObject
+{
+    public const string EventName = "demo_video_interaction";
+
+    [JsonRequired]
+    public Guid PlaybackSessionId { get; init; }
+
+    [Required]
+    [AllowedValues(
+        "started",
+        "resumed",
+        "paused",
+        "seeked",
+        "milestone",
+        "completed",
+        "replayed",
+        "failed")]
+    public required string Action { get; init; }
+
+    [Range(0, int.MaxValue)]
+    [JsonNumberHandling(JsonNumberHandling.Strict)]
+    public int? PositionMs { get; init; }
+
+    [Range(1, int.MaxValue)]
+    [JsonNumberHandling(JsonNumberHandling.Strict)]
+    public int? DurationMs { get; init; }
+
+    [Range(0, 100)]
+    [JsonNumberHandling(JsonNumberHandling.Strict)]
+    public int? Percentage { get; init; }
+
+    [Range(0, int.MaxValue)]
+    [JsonNumberHandling(JsonNumberHandling.Strict)]
+    public int? FromPositionMs { get; init; }
+
+    [Range(0, int.MaxValue)]
+    [JsonNumberHandling(JsonNumberHandling.Strict)]
+    public int? ToPositionMs { get; init; }
+
+    [Range(1, 4)]
+    [JsonNumberHandling(JsonNumberHandling.Strict)]
+    public int? ErrorCode { get; init; }
+
+    [MaxLength(500)]
+    public string? ErrorMessage { get; init; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (PlaybackSessionId == Guid.Empty)
+        {
+            yield return new ValidationResult(
+                "The playback session ID must not be empty.",
+                [nameof(PlaybackSessionId)]);
+        }
+
+        if (Action != "failed")
+        {
+            if (PositionMs is null)
+            {
+                yield return new ValidationResult(
+                    "The playback position is required for this action.",
+                    [nameof(PositionMs)]);
+            }
+
+            if (DurationMs is null)
+            {
+                yield return new ValidationResult(
+                    "The video duration is required for this action.",
+                    [nameof(DurationMs)]);
+            }
+        }
+
+        if (PositionMs is { } position
+            && DurationMs is { } duration
+            && position > duration)
+        {
+            yield return new ValidationResult(
+                "The playback position cannot exceed the video duration.",
+                [nameof(PositionMs)]);
+        }
+
+        if (Action == "seeked")
+        {
+            if (FromPositionMs is null)
+            {
+                yield return new ValidationResult(
+                    "The previous playback position is required for a seek event.",
+                    [nameof(FromPositionMs)]);
+            }
+
+            if (ToPositionMs is null)
+            {
+                yield return new ValidationResult(
+                    "The new playback position is required for a seek event.",
+                    [nameof(ToPositionMs)]);
+            }
+        }
+
+        if (DurationMs is { } videoDuration)
+        {
+            if (FromPositionMs > videoDuration)
+            {
+                yield return new ValidationResult(
+                    "The previous playback position cannot exceed the video duration.",
+                    [nameof(FromPositionMs)]);
+            }
+
+            if (ToPositionMs > videoDuration)
+            {
+                yield return new ValidationResult(
+                    "The new playback position cannot exceed the video duration.",
+                    [nameof(ToPositionMs)]);
+            }
+        }
+
+        if (Action == "milestone"
+            && Percentage is not (25 or 50 or 75 or 90))
+        {
+            yield return new ValidationResult(
+                "A milestone percentage must be 25, 50, 75, or 90.",
+                [nameof(Percentage)]);
+        }
+
+        if (Action == "failed"
+            && ErrorCode is null
+            && string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            yield return new ValidationResult(
+                "An error code or error message is required for a failed event.",
+                [nameof(ErrorCode), nameof(ErrorMessage)]);
+        }
+    }
+}

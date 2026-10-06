@@ -134,6 +134,7 @@ internal sealed class RptrOperationTransformer : IOpenApiOperationTransformer
             or "RecordGuestSessionEnded"
             or "RecordFrontPageView"
             or "RecordGuestSessionCheck"
+            or "RecordDemoVideoInteraction"
             or "TouchMongo"))
         {
             return;

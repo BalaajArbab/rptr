@@ -102,6 +102,24 @@ public static class ActivityEndpoints
                 StatusCodes.Status429TooManyRequests,
                 "application/problem+json");
 
+        endpoints.MapPost("/api/hello/video", RecordDemoVideoInteraction)
+            .AllowAnonymous()
+            .RequireRateLimiting("VideoActivity")
+            .WithName("RecordDemoVideoInteraction")
+            .WithTags("Activity")
+            .WithSummary("Record a demo-video interaction")
+            .WithDescription(
+                "Records an anonymous interaction with the front-page demo video. " +
+                "Device type, platform, server time, and client IP are derived by the backend.")
+            .Accepts<DemoVideoInteractionActivityEventRequest>("application/json")
+            .Produces(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem(
+                StatusCodes.Status400BadRequest,
+                "application/problem+json")
+            .ProducesProblem(
+                StatusCodes.Status429TooManyRequests,
+                "application/problem+json");
+
         return endpoints;
     }
 
@@ -263,6 +281,37 @@ public static class ActivityEndpoints
         return Results.Accepted();
     }
 
+    private static IResult RecordDemoVideoInteraction(
+        DemoVideoInteractionActivityEventRequest request,
+        HttpContext httpContext,
+        IActivityEventSink eventSink)
+    {
+        var requestErrors = ValidateObject(request);
+        if (requestErrors.Count > 0)
+        {
+            return Results.ValidationProblem(requestErrors);
+        }
+
+        eventSink.Track(
+            DemoVideoInteractionActivityEventRequest.EventName,
+            new DemoVideoInteractionActivityEvent(
+                request.PlaybackSessionId,
+                request.Action,
+                request.PositionMs,
+                request.DurationMs,
+                request.Percentage,
+                request.FromPositionMs,
+                request.ToPositionMs,
+                request.ErrorCode,
+                request.ErrorMessage,
+                GetDeviceType(httpContext.Request),
+                GetPlatform(httpContext.Request)),
+            new ActivityActor("anonymous", null, null),
+            GetRemoteIpAddress(httpContext));
+
+        return Results.Accepted();
+    }
+
     private static JsonSerializerOptions CreateEventJsonOptions()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
@@ -388,6 +437,19 @@ public static class ActivityEndpoints
 
     private sealed record GuestSessionCheckActivityEvent(
         string Availability,
+        string DeviceType,
+        string Platform);
+
+    private sealed record DemoVideoInteractionActivityEvent(
+        Guid PlaybackSessionId,
+        string Action,
+        int? PositionMs,
+        int? DurationMs,
+        int? Percentage,
+        int? FromPositionMs,
+        int? ToPositionMs,
+        int? ErrorCode,
+        string? ErrorMessage,
         string DeviceType,
         string Platform);
 }

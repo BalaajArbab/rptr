@@ -1,8 +1,11 @@
+using System.Net;
+using System.Net.Http.Json;
 using dotnetrpg_again.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using rptr.IntegrationTests.Infrastructure;
+using rptr.Services.Activity;
 
 namespace rptr.IntegrationTests;
 
@@ -16,11 +19,7 @@ public sealed class IntegrationHostConfigurationTests
     [Trait("Category", "Integration")]
     public void DataContext_UsesConnectionStringInjectedByTestHost()
     {
-        using var factory = new IntegrationApiFactory(
-            SqlConnectionString,
-            "mongodb://127.0.0.1:1",
-            "rptr_configuration_test",
-            "rptr-integration-tests-only-signing-key-which-is-long-enough-for-hmac-sha512");
+        using var factory = CreateFactory();
         using var scope = factory.Services.CreateScope();
         using var context = scope.ServiceProvider.GetRequiredService<DataContext>();
 
@@ -32,4 +31,50 @@ public sealed class IntegrationHostConfigurationTests
         Assert.Equal(expected.InitialCatalog, actual.InitialCatalog);
         Assert.Equal(expected.UserID, actual.UserID);
     }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task DemoVideoInteraction_WithValidMilestone_ReturnsAccepted()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var request = new DemoVideoInteractionActivityEventRequest
+        {
+            PlaybackSessionId = Guid.NewGuid(),
+            Action = "milestone",
+            PositionMs = 120_000,
+            DurationMs = 480_000,
+            Percentage = 25
+        };
+
+        var response = await client.PostAsJsonAsync("/api/hello/video", request);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task DemoVideoInteraction_WithInvalidMilestone_ReturnsBadRequest()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var request = new DemoVideoInteractionActivityEventRequest
+        {
+            PlaybackSessionId = Guid.NewGuid(),
+            Action = "milestone",
+            PositionMs = 120_000,
+            DurationMs = 480_000,
+            Percentage = 30
+        };
+
+        var response = await client.PostAsJsonAsync("/api/hello/video", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private static IntegrationApiFactory CreateFactory() => new(
+        SqlConnectionString,
+        "mongodb://127.0.0.1:1",
+        "rptr_configuration_test",
+        "rptr-integration-tests-only-signing-key-which-is-long-enough-for-hmac-sha512");
 }
